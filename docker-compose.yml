@@ -1,0 +1,51 @@
+# OMS — chạy toàn bộ hệ thống: docker compose up --build
+# Xoá sạch (container + dữ liệu): docker compose down -v
+name: oms
+
+services:
+  db:
+    image: postgres:17-alpine@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
+    environment:
+      POSTGRES_DB: oms
+      POSTGRES_USER: oms
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-oms-demo-db-2026}
+    volumes:
+      - oms_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oms -d oms"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://oms:${DB_PASSWORD:-oms-demo-db-2026}@db:5432/oms
+      SESSION_SECRET: ${SESSION_SECRET:-oms-demo-session-secret-change-me-0123456789abcdef}
+      BOOTSTRAP_PASSWORD: ${BOOTSTRAP_PASSWORD:-OmsDemo@2026}
+      APP_ORIGIN: http://127.0.0.1:3001
+      SEPAY_API_TOKEN: ""
+      SEPAY_ACCOUNT: ""
+      SEPAY_POLL: "off"
+    ports:
+      - "127.0.0.1:3001:3001"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  frontend:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    ports:
+      - "127.0.0.1:8000:80"
+    depends_on:
+      - backend
+
+volumes:
+  oms_data:

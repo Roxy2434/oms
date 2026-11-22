@@ -1,0 +1,419 @@
+
+    .signin-template {
+      --primary-blue: #2859D9;
+      --primary-blue-hover: #1E47B8;
+      --medium-blue: #4B8DE5;
+      --navy: #193254;
+      --text-muted: #5A6E8C;
+      --bg-left-gradient: radial-gradient(circle at 50% 45%, #F9FCFF 0%, #EBF3FF 58%, #DDEAFF 100%);
+      --border-light: #D8E5F5;
+      --white: #FFFFFF;
+    }
+
+    .signin-template, .signin-template * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    .signin-template, .signin-template {
+      width: 100%;
+      height: 100%;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--navy);
+      background-color: var(--white);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .signin-template .login-layout {
+      display: flex;
+      min-height: 100vh;
+      width: 100%;
+      transition: all 0.35s ease;
+    }
+
+    .signin-template .login-layout.fullscreen-model .left-panel {
+      width: 100%;
+      border-right: none;
+    }
+    .signin-template .login-layout.fullscreen-model .right-panel {
+      display: none;
+    }
+
+    .signin-template .left-panel {
+      width: 56%;
+      background: var(--bg-left-gradient);
+      border-right: 1px solid var(--border-light);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 26px 36px 22px;
+      position: relative;
+      overflow: hidden;
+      user-select: none;
+      transition: width 0.35s ease;
+    }
+
+    .signin-template .left-panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, rgba(40, 89, 217, 0.035) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(40, 89, 217, 0.035) 1px, transparent 1px);
+      background-size: 32px 32px;
+      pointer-events: none;
+    }
+
+    .signin-template .left-header {
+      position: relative;
+      z-index: 10;
+    }
+
+    .signin-template .brand-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .signin-template .logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .signin-template .logo-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--primary-blue), var(--medium-blue));
+      color: var(--white);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      box-shadow: 0 6px 16px rgba(40, 89, 217, 0.24);
+    }
+
+    .signin-template .logo-text {
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--navy);
+      letter-spacing: -0.02em;
+    }
+
+    .signin-template .telemetry-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #0F766E;
+      background: rgba(204, 251, 241, 0.85);
+      border: 1px solid #99F6E4;
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+
+    .signin-template .telemetry-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 8px #10B981;
+      animation: pulseDot 1.6s infinite;
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.35); opacity: 0.65; }
+    }
+
+    .signin-template .view-toggle-btn {
+      appearance: none;
+      border: 1px solid var(--border-light);
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--navy);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 8px rgba(25, 50, 84, 0.05);
+      transition: all 0.2s ease;
+    }
+
+    .signin-template .view-toggle-btn:hover {
+      border-color: var(--primary-blue);
+      color: var(--primary-blue);
+      background: #FFFFFF;
+    }
+
+    .signin-template .hero-heading {
+      font-size: clamp(22px, 2.1vw, 30px);
+      font-weight: 700;
+      color: var(--navy);
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+    }
+
+    .signin-template .hero-subtitle {
+      margin-top: 5px;
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 620px;
+      line-height: 1.45;
+    }
+
+    /* Thanh chọn góc nhìn phân khu nhanh */
+    .signin-template .zone-bar {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .signin-template .zone-chip {
+      appearance: none;
+      border: 1px solid var(--border-light);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 11px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+
+    .signin-template .zone-chip:hover {
+      color: var(--primary-blue);
+      border-color: var(--medium-blue);
+      background: #FFFFFF;
+    }
+
+    .signin-template .zone-chip.active {
+      background: var(--navy);
+      color: #FFFFFF;
+      border-color: var(--navy);
+      box-shadow: 0 3px 10px rgba(25, 50, 84, 0.18);
+    }
+
+    .signin-template .stage-wrapper {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      min-height: 440px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+    }
+
+    .signin-template #oms-canvas-container {
+      width: 100%;
+      height: 100%;
+      min-height: 440px;
+      position: absolute;
+      inset: 0;
+      cursor: grab;
+      opacity: 0;
+      transition: opacity 0.6s ease-out;
+      touch-action: pan-y;
+    }
+
+    .signin-template #oms-canvas-container.ready {
+      opacity: 1;
+    }
+
+    .signin-template #oms-canvas-container:active {
+      cursor: grabbing;
+    }
+
+    .signin-template .loading-indicator {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 13px;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+
+    .signin-template .spinner {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2.5px solid rgba(40, 89, 217, 0.18);
+      border-top-color: var(--primary-blue);
+      animation: spin 0.85s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .signin-template .left-footer {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .signin-template .controls-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border-light);
+      box-shadow: 0 8px 24px rgba(25, 50, 84, 0.07);
+    }
+
+    .signin-template .ctrl-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--navy);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.18s ease;
+    }
+
+    .signin-template .ctrl-btn:hover {
+      background: #F0F6FF;
+      color: var(--primary-blue);
+    }
+
+    .signin-template .ctrl-btn:active {
+      transform: scale(0.96);
+    }
+
+    .signin-template .ctrl-btn.active-autoplay {
+      background: var(--primary-blue);
+      color: var(--white);
+      box-shadow: 0 3px 10px rgba(40, 89, 217, 0.25);
+    }
+
+    .signin-template .ctrl-divider {
+      width: 1px;
+      height: 18px;
+      background: var(--border-light);
+      margin: 0 2px;
+    }
+
+    .signin-template .hint-text {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    /* RIGHT PANEL */
+    .signin-template .right-panel {
+      width: 44%;
+      background: var(--white);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 40px 44px;
+    }
+
+    .signin-template .login-card {
+      width: 100%;
+      max-width: 380px;
+    }
+
+    .signin-template .login-title {
+      font-size: 25px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 8px;
+    }
+
+    .signin-template .login-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 26px;
+    }
+
+    .signin-template .form-group {
+      margin-bottom: 18px;
+    }
+
+    .signin-template .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--navy);
+      margin-bottom: 7px;
+    }
+
+    .signin-template .form-input {
+      width: 100%;
+      padding: 12px 14px;
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--navy);
+      background: #F8FAFC;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 10px;
+      outline: none;
+    }
+
+    .signin-template .form-input:focus {
+      background: var(--white);
+      border-color: var(--primary-blue);
+      box-shadow: 0 0 0 3.5px rgba(40, 89, 217, 0.12);
+    }
+
+    .signin-template .form-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 14px 0 22px;
+      font-size: 13px;
+    }
+
+    .signin-template .submit-btn {
+      width: 100%;
+      padding: 13px 18px;
+      background: var(--primary-blue);
+      color: var(--white);
+      font-family: inherit;
+      font-size: 14.5px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(40, 89, 217, 0.25);
+    }
+
+    @media (max-width: 1024px) {
+      .signin-template .login-layout { flex-direction: column; }
+      .signin-template .left-panel, .signin-template .right-panel { width: 100%; }
+      .signin-template .stage-wrapper, .signin-template #oms-canvas-container { min-height: 400px; }
+    }
+  

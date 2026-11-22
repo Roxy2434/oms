@@ -1,0 +1,61 @@
+%% Luồng ĐẶT HÀNG của OMS — vẽ theo code thật:
+%% backend/src/features/orders/checkout-form.tsx (giao diện)
+%% backend/src/domain/orders/checkout.ts (checkoutQuote, createCheckout)
+%% backend/src/domain/integrations/shopvui.ts (đơn từ ShopVui đi chung createCheckout)
+flowchart TD
+  S([Bắt đầu]) --> SRC{Đơn đến từ đâu?}
+  SRC -->|Nhân viên tạo tay| A1[NV mở màn Tạo đơn]
+  SRC -->|Khách đặt trên ShopVui| W1[ShopVui gửi đơn qua API tích hợp<br/>kênh SHOPVUI, giữ mã đơn khách đã thấy]
+
+  A1 --> A2{Khách đã có?}
+  A2 -->|Có| A3[Chọn khách → tự điền tên, SĐT, địa chỉ]
+  A2 -->|Không| A4[Nhập khách mới]
+  A3 --> A5[Chọn tỉnh HN / ĐN / HCM + địa chỉ chi tiết]
+  A4 --> A5
+  A5 --> A6[Chọn sản phẩm<br/>tối đa 5 dòng, mỗi dòng 1–5 cái, không trùng]
+
+  A6 --> Q1[Giao diện tự gọi báo phí<br/>POST /api/orders/quote]
+  W1 --> Q1
+  Q1 --> Q2[Kiểm tra SKU còn kinh doanh]
+  Q2 --> Q3[Đọc tồn khả dụng các kho đang hoạt động]
+  Q3 --> Q4[Phân bổ kho: 1 kho hoặc tách nhiều kiện<br/>phải đạt SLA 24 giờ, tính cước từng kiện]
+  Q4 --> Q5{Có phương án?}
+  Q5 -->|Không| Q6[Báo lý do: thiếu hàng bao nhiêu<br/>hoặc không kho nào đạt SLA]
+  Q6 --> Q7{NV xử lý}
+  Q7 -->|Sửa hàng / số lượng| A6
+  Q7 -->|Lưu nháp| D1
+  Q5 -->|Có| Q8[Hiện kiện, kho xuất, cước, ETA, tổng tiền<br/>+ mã báo phí có chữ ký, hạn 5 phút]
+
+  Q8 --> P1[Chọn thanh toán: Trả trước / COD<br/>và kênh bán]
+  P1 --> P2{NV bấm}
+  P2 -->|Lưu đơn nháp| D1[Lưu đơn trạng thái NHAP<br/>hạn giao 24h, KHÔNG giữ hàng]
+  D1 --> D2([Kết thúc: đơn nháp — mở Sửa đơn nháp để xác nhận sau])
+  D2 -.-> A6
+  P2 -->|Tạo đơn và xác nhận| C1
+
+  C1[POST /api/orders/checkout + Idempotency-Key<br/>bấm lặp không tạo đơn trùng] --> C2[Khóa tồn các SKU trong đơn]
+  C2 --> C3[Tính lại phương án với tồn mới nhất]
+  C3 --> C4{Còn phương án và<br/>khớp mã báo phí, chưa hết hạn?}
+  C4 -->|Không| C5[Lỗi 409: tồn / giá / phương án đã đổi<br/>giao diện tự báo phí lại]
+  C5 --> Q1
+  C4 -->|Có| C6{Khách mới?}
+  C6 -->|Có| C7[Tạo hồ sơ khách hàng]
+  C6 -->|Không| C8[Dùng khách cũ, bổ sung tỉnh nếu thiếu]
+  C7 --> C9
+  C8 --> C9[Tạo đơn DH-xxxxxx trạng thái DA_XAC_NHAN<br/>lưu giá, phí giao, hạn giao 24h]
+  C9 --> C10[Mỗi kiện: tạo phiếu kiện hàng DANG_GIU<br/>COD: tiền hàng kiện, kiện đầu cộng phí giao]
+  C10 --> C11[Giữ hàng tại kho xuất<br/>tồn giữ chỗ + số lượng]
+  C11 --> C12{Trả trước và khách<br/>đã thanh toán online?}
+  C12 -->|Có| C13[Tự ghi phiếu thu THANH_CONG]
+  C12 -->|Không| C14
+  C13 --> C14[Mở trang chi tiết đơn]
+  C14 --> E([Kết thúc: đơn đã xác nhận, chờ đóng gói])
+
+  classDef nv fill:#e8f1ff,stroke:#3b6fd8,color:#10264f;
+  classDef sys fill:#eefaf1,stroke:#2f9a55,color:#0f3a1f;
+  classDef bad fill:#fdecec,stroke:#c94040,color:#4a1111;
+  classDef ext fill:#fff5e5,stroke:#d08a1a,color:#4a2e00;
+  class A1,A2,A3,A4,A5,A6,Q7,P1,P2 nv;
+  class Q1,Q2,Q3,Q4,Q5,Q8,D1,C1,C2,C3,C4,C6,C7,C8,C9,C10,C11,C12,C13,C14 sys;
+  class Q6,C5 bad;
+  class W1 ext;

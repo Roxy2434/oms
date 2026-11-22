@@ -1,0 +1,5 @@
+import {randomBytes} from 'node:crypto';
+// Old fixture URLs remain usable; persisted business IDs are now ordinary order codes.
+export function resolveOrderId(value:string){const match=/^DEMO-(\d{3})$/.exec(value);if(match&&Number(match[1])>=1&&Number(match[1])<=20)return 'DH-'+String(100+Number(match[1])).padStart(6,'0');return ({'DEMO-HAI-KHO':'DH-000121','DEMO-TACH-KHO':'DH-000122','DEMO-CHO-HANG':'DH-000123','cmvnkpvoz000004eqa7eeswsz':'DH-000124'} as Record<string,string>)[value]??value;}
+export function legacyOrderId(value:string){const match=/^DH-0001(\d{2})$/.exec(value);if(match){const n=Number(match[1]);if(n>=1&&n<=20)return 'DEMO-'+String(n).padStart(3,'0');}return ({'DH-000121':'DEMO-HAI-KHO','DH-000122':'DEMO-TACH-KHO','DH-000123':'DEMO-CHO-HANG','DH-000124':'cmvnkpvoz000004eqa7eeswsz'} as Record<string,string>)[value]??value;}
+export function issueDocumentCode(prefix:string,at=new Date()){const date=new Date(at.getTime()+7*3600000).toISOString().slice(2,10).replaceAll('-','');return `${prefix}-${date}-${randomBytes(3).toString('hex').toUpperCase()}`;}

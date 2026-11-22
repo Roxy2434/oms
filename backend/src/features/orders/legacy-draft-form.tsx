@@ -1,0 +1,59 @@
+'use client';
+import {useState,useRef,useEffect} from 'react';
+import {useRouter} from 'next/navigation';
+import {Plus,Trash2,ArrowRight,Save} from 'lucide-react';
+import './draft-form.css';
+type Customer={id:string;name:string;phone:string;address:string};
+type InitialDraft={id:string;version:number;customerId:string;recipient:string;phone:string;address:string;channel:string;region:string;paymentMethod:string;shippingFee:number;lines:{skuId:string;quantity:number}[]};
+type Attempt={json:string;key:string;uncertain:boolean};
+const money=(value:number)=>value.toLocaleString('vi-VN')+' ₫';
+export function DraftForm({customers,skus,initial}:{customers:Customer[];skus:{id:string;name:string;price:string}[];initial?:InitialDraft}){
+ const router=useRouter();const [customerList,setCustomerList]=useState(customers);const [mode,setMode]=useState<'existing'|'new'>('existing');const [customer,setCustomer]=useState(initial?.customerId??'');const [search,setSearch]=useState('');
+ const [recipient,setRecipient]=useState(initial?.recipient??'');const [phone,setPhone]=useState(initial?.phone??'');const [address,setAddress]=useState(initial?.address??'');const [region,setRegion]=useState(initial?.region??'');const [payment,setPayment]=useState(initial?.paymentMethod??'');const [fee,setFee]=useState(String(initial?.shippingFee??30000));
+ const [lines,setLines]=useState(initial?.lines??[{skuId:'',quantity:1}]);const [dirty,setDirty]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');
+ const customerAttempt=useRef<Attempt|null>(null),orderAttempt=useRef<Attempt|null>(null);const lock=useRef(false);const alert=useRef<HTMLDivElement>(null);
+ const total=lines.reduce((sum,line)=>sum+Number(skus.find(s=>s.id===line.skuId)?.price??0)*(Number.isFinite(line.quantity)?line.quantity:0),0);
+ const visibleCustomers=customerList.filter(c=>c.id===customer||[c.name,c.phone,c.id].some(v=>v.toLocaleLowerCase('vi').includes(search.trim().toLocaleLowerCase('vi'))));
+ useEffect(()=>{if(!dirty)return;const unload=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};const navigate=(e:MouseEvent)=>{const a=(e.target as Element).closest('a[href]');if(a&&!a.getAttribute('href')?.startsWith('#')&&!window.confirm('Đơn chưa lưu. Bạn có muốn rời biểu mẫu?'))e.preventDefault();};window.addEventListener('beforeunload',unload);document.addEventListener('click',navigate,true);return()=>{window.removeEventListener('beforeunload',unload);document.removeEventListener('click',navigate,true);};},[dirty]);
+ function chooseCustomer(id:string){setCustomer(id);const c=customerList.find(c=>c.id===id);if(c){setRecipient(c.name);setPhone(c.phone);setAddress(c.address);}else{setRecipient('');setPhone('');setAddress('');}setRegion('');setDirty(true);}
+ async function post(url:string,body:unknown,attempt:{current:Attempt|null}){
+  const json=JSON.stringify(body);if(attempt.current?.uncertain&&attempt.current.json!==json)throw Error('Thao tác trước chưa rõ kết quả. Giữ nguyên dữ liệu và thử lại để kiểm tra, không gửi một thao tác mới.');
+  if(attempt.current?.json!==json)attempt.current={json,key:crypto.randomUUID(),uncertain:false};
+  attempt.current!.uncertain=true;let response:Response;
+  try{response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':attempt.current!.key},body:json});}catch{throw Error('Chưa nhận được kết quả. Giữ nguyên dữ liệu rồi bấm lại để kiểm tra cùng thao tác, không tạo trùng.');}
+  const result=await response.json();if(!response.ok){if(response.status<500)attempt.current=null;throw Error(result.error??'Chưa lưu được. Vui lòng thử lại.');}attempt.current!.uncertain=false;return result;
+ }
+ async function submit(event:React.FormEvent<HTMLFormElement>){event.preventDefault();if(lock.current)return;lock.current=true;setBusy(true);setError('');const intent=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')??'continue';const form=new FormData(event.currentTarget);
+  try{let customerId=customer;
+   if(mode==='new'){
+    const created=await post('/api/foundation/customers',{name:recipient,phone,address},customerAttempt);customerId=created.id;
+    setCustomer(customerId);setCustomerList(list=>list.some(c=>c.id===customerId)?list:[...list,{id:customerId,name:recipient,phone,address}]);setMode('existing');setNotice('Đã lưu hồ sơ khách. Đơn hàng chỉ được tạo khi bước lưu đơn thành công.');
+   }
+   if(!customerId)throw Error('Chọn khách hàng đã có hoặc chuyển sang Khách mới.');
+   if(new Set(lines.map(l=>l.skuId)).size!==lines.length)throw Error('Mỗi sản phẩm chỉ chọn một dòng. Hãy tăng số lượng thay vì chọn trùng.');
+   const payload={customerId,recipient,phone,address,channel:form.get('channel'),region,paymentMethod:payment,shippingFee:Number(fee),lines};
+   // Legacy form only edits existing MANUAL drafts; new orders go through checkout (server-computed fee).
+   if(!initial)throw Error('Tạo đơn mới tại màn Tạo đơn.');const result=await post(`/api/orders/${initial.id}/commands`,{action:'edit',version:initial.version,draft:payload},orderAttempt);
+   setDirty(false);router.push('/orders/'+result.id+(intent==='continue'?'?flow=allocate':''));router.refresh();
+  }catch(e){setError(e instanceof Error?e.message:'Chưa lưu được đơn.');requestAnimationFrame(()=>alert.current?.focus());}finally{lock.current=false;setBusy(false);}
+ }
+ return <form className="draft-workspace" onSubmit={submit} onChange={()=>setDirty(true)} aria-busy={busy}>
+  <div className="draft-main"><fieldset disabled={busy}>
+   <section className="panel form-section"><header className="draft-section-heading"><span>1</span><div><h2>Người nhận</h2><p>Chọn khách đã có hoặc nhập khách mới ngay tại đây.</p></div></header>
+    {!initial&&<div className="draft-customer-mode" role="group" aria-label="Loại khách hàng"><button type="button" className={'button '+(mode==='existing'?'primary':'')} aria-pressed={mode==='existing'} onClick={()=>{setMode('existing');setDirty(true);}}>Khách đã có</button><button type="button" className={'button '+(mode==='new'?'primary':'')} aria-pressed={mode==='new'} onClick={()=>{setMode('new');setCustomer('');setRecipient('');setPhone('');setAddress('');setRegion('');setDirty(true);}}>Khách mới</button></div>}
+    {mode==='existing'&&<div className="form-grid draft-customer-picker"><label>Tìm khách theo tên / số điện thoại<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nhập tên hoặc số điện thoại"/></label><label>Khách hàng<select aria-label="Khách hàng" required value={customer} onChange={e=>chooseCustomer(e.target.value)}><option value="">Chọn khách hàng…</option>{visibleCustomers.map(c=><option value={c.id} key={c.id}>{c.name} · {c.phone}</option>)}</select></label></div>}
+    <div className="form-grid"><label>Tên người nhận<input name="recipient" value={recipient} onChange={e=>setRecipient(e.target.value)} autoComplete="name" required minLength={2} maxLength={120}/></label><label>Số điện thoại<input name="phone" value={phone} onChange={e=>setPhone(e.target.value)} autoComplete="tel" inputMode="tel" minLength={8} maxLength={20} required/></label><label className="form-wide">Địa chỉ giao hàng<input name="address" value={address} onChange={e=>setAddress(e.target.value)} autoComplete="street-address" required minLength={5} maxLength={500}/></label></div>
+    {mode==='new'?<p>Hồ sơ khách được lưu khi bạn lưu đơn hoặc tiếp tục. Nếu lưu đơn lỗi, hồ sơ khách đã tạo vẫn được giữ để dùng lại.</p>:<p>Thông tin người nhận trên đơn có thể khác hồ sơ khách. Sửa ở đây không ghi đè hồ sơ khách.</p>}
+   </section>
+   <section className="panel form-section"><header className="draft-section-heading"><span>2</span><div><h2>Sản phẩm</h2><p>Chọn tối đa 5 sản phẩm khác nhau, mỗi sản phẩm 1–5 đơn vị.</p></div></header>
+    {lines.map((line,index)=>{const sku=skus.find(s=>s.id===line.skuId);return <div className="draft-product-line" key={index}><label>Mặt hàng {index+1}<select aria-label={`Mặt hàng ${index+1}`} required value={line.skuId} onChange={e=>setLines(lines.map((l,i)=>i===index?{...l,skuId:e.target.value}:l))}><option value="">Chọn sản phẩm…</option>{skus.map(s=><option key={s.id} value={s.id} disabled={lines.some((l,i)=>i!==index&&l.skuId===s.id)}>{s.name} · {s.id}</option>)}</select></label><label>Số lượng<input aria-label={`Số lượng dòng ${index+1}`} type="number" min={1} max={5} required value={line.quantity||''} onChange={e=>setLines(lines.map((l,i)=>i===index?{...l,quantity:Number(e.target.value)}:l))}/></label><div className="draft-line-price"><small>{sku?money(Number(sku.price))+' / đơn vị':'Chưa chọn hàng'}</small><strong>{money(Number(sku?.price??0)*line.quantity)}</strong></div><button className="icon-button" type="button" disabled={lines.length===1} aria-label={`Xóa dòng ${index+1}`} onClick={()=>setLines(lines.filter((_,i)=>i!==index))}><Trash2 size={17}/></button></div>;})}
+    <button className="button" type="button" disabled={lines.length>=5||lines.length>=skus.length} onClick={()=>setLines([...lines,{skuId:'',quantity:1}])}><Plus size={15}/>Thêm mặt hàng</button>
+   </section>
+   <section className="panel form-section"><header className="draft-section-heading"><span>3</span><div><h2>Giao hàng & thanh toán</h2><p>Xác nhận vùng giao đúng với địa chỉ người nhận.</p></div></header><div className="form-grid"><label>Vùng giao<select aria-label="Vùng giao" name="region" required value={region} onChange={e=>setRegion(e.target.value)}><option value="">Chọn vùng giao…</option><option value="HN-NOITHANH">Hà Nội · Nội thành</option><option value="DN-NOITHANH">Đà Nẵng · Nội thành</option><option value="HCM-NOITHANH">TP.HCM · Nội thành</option></select></label><label>Thanh toán<select aria-label="Thanh toán" name="paymentMethod" required value={payment} onChange={e=>setPayment(e.target.value)}><option value="">Chọn cách thanh toán…</option><option value="TRA_TRUOC">Trả trước</option><option value="COD">Thu khi nhận hàng (COD mô phỏng)</option></select></label><label>Phí giao thu của khách (₫)<input name="shippingFee" type="number" required min={0} max={99999999999999} step={1} value={fee} onChange={e=>setFee(e.target.value)}/></label><label>Kênh bán<select name="channel" defaultValue={initial?.channel??'NHAP_TAY'}><option value="NHAP_TAY">Nhập tay</option><option value="WEBSITE">Website</option><option value="SHOPEE">Shopee</option><option value="TIKTOK">TikTok</option></select></label></div><p>Phí khách trả không phải chi phí xuất/giao của kho. Chi phí kho được tính riêng ở bước xem phương án.</p>{payment==='TRA_TRUOC'&&<p>Chọn Trả trước không có nghĩa đã thu tiền. Bạn sẽ ghi nhận chứng từ thu sau khi tạo đơn.</p>}</section>
+  </fieldset></div>
+  <aside className="draft-summary"><section className="panel form-section"><h2>Tóm tắt đơn</h2><p>{recipient||'Chưa có người nhận'}</p><dl><div><dt>Số lượng sản phẩm</dt><dd>{lines.reduce((n,l)=>n+l.quantity,0)}</dd></div><div><dt>Tiền hàng</dt><dd>{money(total)}</dd></div><div><dt>Phí khách trả</dt><dd>{money(Number(fee)||0)}</dd></div><div className="draft-total"><dt>Tổng khách thanh toán</dt><dd data-order-total>{money(total+(Number(fee)||0))}</dd></div></dl><p>Đây là giá xem trước. Máy chủ kiểm tra giá khi lưu; phương án kho chưa được tính và chưa có hàng nào được giữ.</p>
+   {notice&&<p className="notice" role="status">{notice}</p>}{error&&<div className="error-box" role="alert" tabIndex={-1} ref={alert}>{error}</div>}
+   <button className="button primary" disabled={busy} type="submit" name="intent" value="continue">{busy?'Đang lưu…':<>Tiếp tục chọn kho<ArrowRight size={16}/></>}</button><button className="button" disabled={busy} type="submit" name="intent" value="draft"><Save size={15}/>Lưu đơn nháp</button><p>Tiếp tục sẽ lưu đơn rồi tự tải phương án. Bạn xem lại trước khi xác nhận giữ hàng.</p>
+  </section></aside>
+ </form>;
+}

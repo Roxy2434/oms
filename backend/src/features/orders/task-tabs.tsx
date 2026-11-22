@@ -1,0 +1,5 @@
+'use client';
+import {useState,type ReactNode} from 'react';
+import * as Tabs from '@radix-ui/react-tabs';
+// keepMounted: hidden tabs stay mounted so in-progress work (selection, handover sheet) survives switching tabs.
+export function TaskTabs({tabs,initialTab,label='Nhóm công việc',keepMounted=false}:{tabs:{id:string;label:string;content:ReactNode}[];initialTab?:string;label?:string;keepMounted?:boolean}){const [tab,setTab]=useState(initialTab&&tabs.some(t=>t.id===initialTab)?initialTab:tabs[0].id);return <Tabs.Root className="page-stack" value={tab} onValueChange={value=>{setTab(value);const url=new URL(location.href);url.searchParams.set('view',value);history.replaceState(null,'',url);}}><Tabs.List className="order-tabs" aria-label={label}>{tabs.map(t=><Tabs.Trigger className="order-tab" key={t.id} value={t.id}>{t.label}</Tabs.Trigger>)}</Tabs.List>{tabs.map(t=><Tabs.Content key={t.id} value={t.id} {...(keepMounted?{forceMount:true as const,hidden:tab!==t.id}:{})}>{t.content}</Tabs.Content>)}</Tabs.Root>;}

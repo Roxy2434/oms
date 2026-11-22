@@ -1,0 +1,8 @@
+import {describe,it,expect} from 'vitest';
+import {moneyPosition,causeAmount,causeHasPending,missingShippingFee} from '../../src/domain/payments/balances';
+const refund={id:'r',kind:'HOAN',reason:'HOAN_RMA',status:'THANH_CONG',amount:100000,returnId:'RMA1',originalId:null};
+describe('valid money after compensation',()=>{
+ it('deducts refunded money and reserves outgoing pending amounts',()=>{expect(moneyPosition([{...refund,id:'pay',kind:'THU',amount:130000,reason:'THU_TRA_TRUOC'},refund,{...refund,id:'pending',status:'CHUA_RO',amount:10000}])).toEqual({net:30000,pendingCollect:0,pendingRefund:10000,available:20000});});
+ it('follows a compensation chain without releasing cap for an unconfirmed reversal',()=>{const reverse={...refund,id:'rev',kind:'THU',reason:'THU_BU_HOAN_SAI',originalId:'r'};const root=(t:{returnId?:string|null})=>t.returnId==='RMA1';expect(causeAmount([refund,reverse],'HOAN',root)).toBe(0);expect(causeAmount([refund,{...reverse,status:'CHUA_RO'}],'HOAN',root,true)).toBe(100000);expect(causeHasPending([refund,{...reverse,status:'CHUA_RO'}],root)).toBe(true);expect(causeAmount([refund,reverse,{...refund,id:'again',originalId:'rev',amount:25000}],'HOAN',root)).toBe(25000);});
+ it('caps missing fee to shipping only when goods are returning',()=>{const o={status:'DA_XAC_NHAN',shippingFee:30000,lines:[{id:'l',priceSnapshot:100000}],shipments:[{status:'CHUYEN_HOAN',codAmount:130000,lines:[{orderLineId:'l',quantity:1}]}],transactions:[]};expect(missingShippingFee(o)).toBe(30000);expect(missingShippingFee({...o,shipments:[{...o.shipments[0],status:'DANG_GIAO'}]})).toBe(0);expect(missingShippingFee({...o,transactions:[{...refund,id:'fee',kind:'THU',reason:'THU_PHI_CON_THIEU',amount:30000,status:'CHUA_RO'}]})).toBe(0);});
+});

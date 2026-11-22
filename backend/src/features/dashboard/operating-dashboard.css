@@ -1,0 +1,58 @@
+/* Candidate operating layout: compact overview, prominent money, actionable first screen. */
+.operating-dashboard{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(290px,1fr);gap:18px;grid-template-areas:"heading heading" "context context" "metrics metrics" "recent work" "chart chart" "secondary secondary" "disclosure disclosure";align-items:start}
+.operating-dashboard>.page-heading{grid-area:heading;margin:0;align-items:center}
+.operating-dashboard .page-heading h1{font-size:26px;letter-spacing:-.9px}
+.operating-dashboard .page-heading p{font-size:12px;margin-top:5px}
+.operating-dashboard>.dashboard-context{grid-area:context;margin:-8px 0 -4px;min-height:24px;font-size:10px}
+.operating-dashboard .channel-filter{margin-left:auto}
+.operating-dashboard>.kpi-strip{grid-area:metrics;margin:0;grid-template-columns:repeat(4,minmax(0,1fr));border:0;border-radius:0;background:transparent;overflow:visible;gap:0}
+.operating-dashboard .kpi{padding:15px 22px;background:white;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.operating-dashboard .kpi:first-child{background:white;border:1px solid var(--border);border-radius:12px 0 0 12px;padding-left:22px}
+.operating-dashboard .kpi:last-child{border-right:1px solid var(--border);border-radius:0 12px 12px 0}
+.operating-dashboard .kpi-top{font-size:11px;gap:10px}
+.operating-dashboard .kpi:first-child .kpi-top{color:#52627a;font-weight:500}
+.operating-dashboard .kpi-icon{width:27px;height:27px;background:#f1f5fb;color:#526b91}
+.operating-dashboard .kpi:first-child .kpi-icon{background:#f1f5fb;color:#526b91}
+.operating-dashboard .kpi-value{font-size:26px;letter-spacing:-.8px;margin:6px 0 5px;font-weight:600;line-height:1.4}
+.operating-dashboard .kpi:first-child .kpi-value{font-size:26px;line-height:1.4;color:var(--ink);letter-spacing:-.8px;margin:6px 0 5px}
+.operating-dashboard .kpi-bottom{font-size:9px;min-height:18px}
+.operating-dashboard>.dashboard-main-grid{display:contents}
+.operating-dashboard .work-panel{grid-area:work;border-top:3px solid #2563eb;overflow:hidden}
+.operating-dashboard .chart-panel{grid-area:chart}
+.operating-dashboard>.recent-panel{grid-area:recent;overflow:hidden}
+.operating-dashboard>.dashboard-secondary-grid{grid-area:secondary;margin:0;grid-template-columns:minmax(0,1.9fr) minmax(290px,1fr);gap:18px}
+.operating-dashboard .panel-head{padding:16px 18px 0;align-items:center}
+.operating-dashboard .panel-head h2{font-size:14px;letter-spacing:-.25px}
+.operating-dashboard .panel-head p{font-size:10px;margin-top:3px}
+.operating-dashboard .recent-panel .panel-head{padding-bottom:14px}
+.operating-dashboard .section-count{font-size:10px;font-weight:400;color:var(--muted);margin-left:9px;white-space:nowrap}
+.operating-dashboard .work-total{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:23px;padding:0 6px;background:#e8f0ff;color:#1d4ed8;font-size:11px;border-radius:6px;margin-left:6px;vertical-align:middle}
+.operating-dashboard .work-panel .panel-head{display:block}
+.operating-dashboard .work-panel .badge{display:none}
+.operating-dashboard .work-list{padding:12px 18px 8px}
+.operating-dashboard .work-row{padding:14px 0;font-size:12px;gap:10px;min-height:60px;border-bottom:1px solid #edf1f7}
+.operating-dashboard .work-row:last-child{border-bottom:0}
+.operating-dashboard .work-row>strong{font-size:17px;letter-spacing:-.5px;color:#253d61}
+.operating-dashboard .work-indicator{width:30px;height:30px;border-radius:8px}
+.operating-dashboard .work-footer{margin:0 18px;font-size:10px;padding:15px 0;line-height:1.6}
+.operating-dashboard .orders-chart,.operating-dashboard .chart-loading{height:165px}
+.operating-dashboard .chart-caption{margin:8px 18px 0;padding:10px 0;font-size:9px}
+.operating-dashboard .chart-legend{font-size:10px}
+.operating-dashboard th{font-size:10px;padding:9px 16px}
+.operating-dashboard td{font-size:11px;padding:9px 16px;height:42px}
+.operating-dashboard .recent-panel td:last-child .icon-button{width:25px;height:25px}
+.operating-dashboard .recent-panel th:nth-child(6),.operating-dashboard .recent-panel td:nth-child(6){display:none}
+.operating-dashboard .recent-panel .channel-name{font-size:10px}
+.operating-dashboard .warehouse-row{padding:12px 0}
+.operating-dashboard .warehouse-list{padding:6px 18px}
+.operating-dashboard .warehouse-name strong{font-size:12px}
+.operating-dashboard .warehouse-name small,.operating-dashboard .warehouse-quantity small{font-size:10px}
+.operating-dashboard .rate{margin:16px 18px}
+.operating-dashboard .performance-link{margin:0 18px;padding:12px 0}
+.operating-dashboard .operating-disclosure{grid-area:disclosure;display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted);padding-top:1px}
+.operating-dashboard:has(.staff-grid){grid-template-areas:"heading heading" "context context" "recent work" "secondary work" "disclosure disclosure"}
+.operating-dashboard .staff-guide{grid-area:secondary}
+
+@media(min-width:1600px){.operating-dashboard{grid-template-columns:minmax(0,2.1fr) minmax(320px,1fr)}.operating-dashboard>.dashboard-secondary-grid{grid-template-columns:minmax(0,2.1fr) minmax(320px,1fr)}.operating-dashboard .recent-panel th:nth-child(6),.operating-dashboard .recent-panel td:nth-child(6){display:table-cell}.operating-dashboard .kpi-value{font-size:29px}.operating-dashboard .kpi:first-child .kpi-value{font-size:29px}}
+@media(max-width:1100px){.operating-dashboard{grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);gap:16px}.operating-dashboard .kpi{padding:14px}.operating-dashboard .kpi:first-child{padding-left:16px}.operating-dashboard .kpi-value{font-size:23px}.operating-dashboard .kpi:first-child .kpi-value{font-size:23px}.operating-dashboard .section-count{display:none}.operating-dashboard>.dashboard-secondary-grid{grid-template-columns:1.65fr 1fr}.operating-dashboard .recent-panel th:nth-child(3),.operating-dashboard .recent-panel td:nth-child(3){display:none}}
+@media(max-width:767px){.operating-dashboard{grid-template-columns:1fr;grid-template-areas:"heading" "context" "metrics" "work" "recent" "chart" "secondary" "disclosure";gap:16px}.operating-dashboard>.page-heading{display:flex;flex-wrap:wrap;gap:12px}.operating-dashboard .page-heading h1{font-size:24px}.operating-dashboard .heading-actions{margin:0;gap:6px;justify-content:flex-start;width:100%}.operating-dashboard>.dashboard-context{margin:0;gap:8px}.operating-dashboard>.kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--border);border-radius:12px;overflow:hidden;background:white}.operating-dashboard .kpi,.operating-dashboard .kpi:first-child,.operating-dashboard .kpi:last-child{border:0;border-radius:0;padding:14px;min-width:0}.operating-dashboard .kpi:nth-child(even){border-left:1px solid var(--border)}.operating-dashboard .kpi:nth-child(n+3){border-top:1px solid var(--border)}.operating-dashboard .kpi-value,.operating-dashboard .kpi:first-child .kpi-value{font-size:23px;letter-spacing:-.8px;line-height:1.4;margin:8px 0 4px}.operating-dashboard .kpi-bottom{font-size:9px;line-height:1.5}.operating-dashboard .kpi:first-child .kpi-top{font-size:11px}.operating-dashboard .kpi-icon{width:23px;height:23px}.operating-dashboard .kpi:first-child .kpi-icon{display:grid}.operating-dashboard .work-panel .panel-head{display:flex}.operating-dashboard .work-row{padding:10px 0;min-height:47px}.operating-dashboard .work-panel .panel-head p{font-size:9px}.operating-dashboard .work-list{padding-top:8px}.operating-dashboard .work-footer{padding:11px 0}.operating-dashboard>.dashboard-secondary-grid{grid-template-columns:1fr}.operating-dashboard .orders-chart{height:190px}.operating-dashboard .section-count{display:none}.operating-dashboard .recent-panel th:nth-child(3),.operating-dashboard .recent-panel td:nth-child(3),.operating-dashboard .recent-panel th:nth-child(6),.operating-dashboard .recent-panel td:nth-child(6){display:table-cell}.operating-dashboard .operating-disclosure{align-items:flex-start;font-size:9px}.operating-dashboard .operating-disclosure .live-dot{flex-shrink:0;margin-top:6px}.operating-dashboard:has(.staff-grid){grid-template-areas:"heading" "context" "work" "recent" "secondary" "disclosure"}}

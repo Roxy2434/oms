@@ -1,0 +1,29 @@
+/* Integration-only adjustments. Visual source: operator's Untitled-1.html → template.css. */
+.signin-template{min-height:100svh;height:auto;font-family:Inter,system-ui,sans-serif}
+.signin-template .login-layout{min-height:100svh;transition:none}
+.signin-template .left-panel{transition:none}
+.signin-template .stage-wrapper{min-height:360px}
+.signin-template #oms-canvas-container{min-height:360px;opacity:1;transition:none}
+.signin-template .warehouse-canvas,.signin-template #oms-canvas-container canvas{display:block;width:100%;height:100%}
+.signin-template .model-disclosure{margin-top:6px;font-size:10px;color:#526581;line-height:1.5}
+.signin-template .telemetry-pill{font-size:10.5px}
+.signin-template .login-brand-copy{display:flex;flex-direction:column;gap:3px}.signin-template .login-brand-copy strong{font-size:25px;line-height:1.1;letter-spacing:-1px;font-weight:700}.signin-template .login-brand-copy strong>span{color:#2859d9}.signin-template .login-brand-copy small{font-size:10px;line-height:1.4;color:#5a6e8c}.signin-template .left-header .logo-badge{width:42px;height:42px;background:#2859d9;box-shadow:none}
+.signin-template .password-wrap{position:relative}
+.signin-template .password-wrap input{padding-right:48px}
+.signin-template .password-toggle{position:absolute;right:4px;top:3px;width:40px;height:40px;display:grid;place-items:center;padding:0;background:transparent;border:0;border-radius:7px;color:#5a6e8c;cursor:pointer}
+.signin-template button:focus-visible{outline:2px solid #2859d9;outline-offset:3px}
+.signin-template .form-input{min-height:45px}
+.signin-template .form-input[aria-invalid=true]{border-color:#b64242}
+.signin-template .form-row{color:#5a6e8c;font-size:12px}
+.signin-template .submit-btn{display:flex;justify-content:center;align-items:center;gap:8px;min-height:46px}
+.signin-template button:disabled{cursor:default;opacity:.65}
+.signin-template .signin-error{display:flex;gap:8px;align-items:flex-start;border:1px solid #efcfca;border-radius:8px;padding:10px;margin:0 0 14px;font-size:12px;line-height:1.7;color:#922e2e;background:#fff4f2}
+.signin-template .signin-error svg{flex-shrink:0;margin-top:3px}
+.signin-template .course-disclosure{font-size:10px;line-height:1.8;color:#526581;margin-top:26px}
+.signin-template .caps-hint{font-size:11px;color:#895000;margin-top:6px}
+.signin-template .login-spinner{animation:spin .9s linear infinite}
+.signin-template .hint-text{line-height:1.5;text-align:center}
+.signin-template .controls-bar{backdrop-filter:none;flex-wrap:wrap;justify-content:center}
+@media(min-width:1025px) and (max-height:800px){.signin-template .left-panel{padding:20px 24px 16px}.signin-template .brand-bar{margin-bottom:10px}.signin-template .hero-heading{font-size:24px}.signin-template .hero-subtitle{font-size:11px}.signin-template .zone-bar{margin-top:9px}.signin-template .zone-chip{font-size:10px;padding:5px 8px}.signin-template .view-toggle-btn{font-size:10px;padding:6px 10px}.signin-template .stage-wrapper,.signin-template #oms-canvas-container{min-height:300px}.signin-template .hint-text{font-size:10px}.signin-template .ctrl-btn{padding:7px 11px;font-size:11px}}
+@media(max-width:1024px){.signin-template .left-panel{padding:22px 25px 18px}.signin-template .brand-bar{margin-bottom:0}.signin-template .logo-wrap{flex-wrap:wrap;gap:9px}.signin-template .logo-text{font-size:16px}.signin-template .telemetry-pill{display:none}.signin-template .left-panel .hero-heading,.signin-template .left-panel .hero-subtitle,.signin-template .left-panel .model-disclosure,.signin-template .left-panel .zone-bar,.signin-template .stage-wrapper,.signin-template .left-footer{display:none}.signin-template .right-panel{flex:1;padding:28px 25px 40px}.signin-template .login-card{max-width:400px}.signin-template .form-input{font-size:16px}.signin-template .view-toggle-btn{font-size:10px;padding:7px 10px}.signin-template .fullscreen-model .left-panel{min-height:100svh}.signin-template .fullscreen-model .hero-heading,.signin-template .fullscreen-model .hero-subtitle,.signin-template .fullscreen-model .model-disclosure{display:block}.signin-template .fullscreen-model .zone-bar{display:flex}.signin-template .fullscreen-model .stage-wrapper{display:flex;min-height:340px}.signin-template .fullscreen-model #oms-canvas-container{min-height:340px}.signin-template .fullscreen-model .left-footer{display:flex}.signin-template .fullscreen-model .brand-bar{margin-bottom:14px}.signin-template .fullscreen-model .controls-bar{border-radius:16px}.signin-template .fullscreen-model .ctrl-btn{font-size:10px;padding:7px 9px}.signin-template .fullscreen-model .hero-subtitle{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.signin-template .telemetry-dot{animation:none}.signin-template .ctrl-btn,.signin-template #oms-canvas-container,.signin-template .loading-indicator{transition:none}.signin-template .ctrl-btn:active{transform:none}}

@@ -1,0 +1,68 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Luồng đặt hàng OMS</title>
+<style>body{font-family:Segoe UI,sans-serif;margin:24px;background:#fff}h1{font-size:20px}.legend span{display:inline-block;padding:2px 8px;margin-right:8px;border-radius:4px;border:1px solid}</style></head><body>
+<h1>Luồng đặt hàng OMS</h1>
+<p class="legend"><span style="background:#e8f1ff;border-color:#3b6fd8">Nhân viên</span><span style="background:#eefaf1;border-color:#2f9a55">Hệ thống OMS</span><span style="background:#fdecec;border-color:#c94040">Lỗi / chặn</span><span style="background:#fff5e5;border-color:#d08a1a">ShopVui</span></p>
+<pre class="mermaid">%% Luồng ĐẶT H&#192;NG của OMS — vẽ theo code thật:
+%% backend/src/features/orders/checkout-form.tsx (giao diện)
+%% backend/src/domain/orders/checkout.ts (checkoutQuote, createCheckout)
+%% backend/src/domain/integrations/shopvui.ts (đơn từ ShopVui đi chung createCheckout)
+flowchart TD
+  S([Bắt đầu]) --&gt; SRC{Đơn đến từ đ&#226;u?}
+  SRC --&gt;|Nh&#226;n vi&#234;n tạo tay| A1[NV mở m&#224;n Tạo đơn]
+  SRC --&gt;|Kh&#225;ch đặt tr&#234;n ShopVui| W1[ShopVui gửi đơn qua API t&#237;ch hợp&lt;br/&gt;k&#234;nh SHOPVUI, giữ m&#227; đơn kh&#225;ch đ&#227; thấy]
+
+  A1 --&gt; A2{Kh&#225;ch đ&#227; c&#243;?}
+  A2 --&gt;|C&#243;| A3[Chọn kh&#225;ch → tự điền t&#234;n, SĐT, địa chỉ]
+  A2 --&gt;|Kh&#244;ng| A4[Nhập kh&#225;ch mới]
+  A3 --&gt; A5[Chọn tỉnh HN / ĐN / HCM + địa chỉ chi tiết]
+  A4 --&gt; A5
+  A5 --&gt; A6[Chọn sản phẩm&lt;br/&gt;tối đa 5 d&#242;ng, mỗi d&#242;ng 1–5 c&#225;i, kh&#244;ng tr&#249;ng]
+
+  A6 --&gt; Q1[Giao diện tự gọi b&#225;o ph&#237;&lt;br/&gt;POST /api/orders/quote]
+  W1 --&gt; Q1
+  Q1 --&gt; Q2[Kiểm tra SKU c&#242;n kinh doanh]
+  Q2 --&gt; Q3[Đọc tồn khả dụng c&#225;c kho đang hoạt động]
+  Q3 --&gt; Q4[Ph&#226;n bổ kho: 1 kho hoặc t&#225;ch nhiều kiện&lt;br/&gt;phải đạt SLA 24 giờ, t&#237;nh cước từng kiện]
+  Q4 --&gt; Q5{C&#243; phương &#225;n?}
+  Q5 --&gt;|Kh&#244;ng| Q6[B&#225;o l&#253; do: thiếu h&#224;ng bao nhi&#234;u&lt;br/&gt;hoặc kh&#244;ng kho n&#224;o đạt SLA]
+  Q6 --&gt; Q7{NV xử l&#253;}
+  Q7 --&gt;|Sửa h&#224;ng / số lượng| A6
+  Q7 --&gt;|Lưu nh&#225;p| D1
+  Q5 --&gt;|C&#243;| Q8[Hiện kiện, kho xuất, cước, ETA, tổng tiền&lt;br/&gt;+ m&#227; b&#225;o ph&#237; c&#243; chữ k&#253;, hạn 5 ph&#250;t]
+
+  Q8 --&gt; P1[Chọn thanh to&#225;n: Trả trước / COD&lt;br/&gt;v&#224; k&#234;nh b&#225;n]
+  P1 --&gt; P2{NV bấm}
+  P2 --&gt;|Lưu đơn nh&#225;p| D1[Lưu đơn trạng th&#225;i NHAP&lt;br/&gt;hạn giao 24h, KH&#212;NG giữ h&#224;ng]
+  D1 --&gt; D2([Kết th&#250;c: đơn nh&#225;p — mở Sửa đơn nh&#225;p để x&#225;c nhận sau])
+  D2 -.-&gt; A6
+  P2 --&gt;|Tạo đơn v&#224; x&#225;c nhận| C1
+
+  C1[POST /api/orders/checkout + Idempotency-Key&lt;br/&gt;bấm lặp kh&#244;ng tạo đơn tr&#249;ng] --&gt; C2[Kh&#243;a tồn c&#225;c SKU trong đơn]
+  C2 --&gt; C3[T&#237;nh lại phương &#225;n với tồn mới nhất]
+  C3 --&gt; C4{C&#242;n phương &#225;n v&#224;&lt;br/&gt;khớp m&#227; b&#225;o ph&#237;, chưa hết hạn?}
+  C4 --&gt;|Kh&#244;ng| C5[Lỗi 409: tồn / gi&#225; / phương &#225;n đ&#227; đổi&lt;br/&gt;giao diện tự b&#225;o ph&#237; lại]
+  C5 --&gt; Q1
+  C4 --&gt;|C&#243;| C6{Kh&#225;ch mới?}
+  C6 --&gt;|C&#243;| C7[Tạo hồ sơ kh&#225;ch h&#224;ng]
+  C6 --&gt;|Kh&#244;ng| C8[D&#249;ng kh&#225;ch cũ, bổ sung tỉnh nếu thiếu]
+  C7 --&gt; C9
+  C8 --&gt; C9[Tạo đơn DH-xxxxxx trạng th&#225;i DA_XAC_NHAN&lt;br/&gt;lưu gi&#225;, ph&#237; giao, hạn giao 24h]
+  C9 --&gt; C10[Mỗi kiện: tạo phiếu kiện h&#224;ng DANG_GIU&lt;br/&gt;COD: tiền h&#224;ng kiện, kiện đầu cộng ph&#237; giao]
+  C10 --&gt; C11[Giữ h&#224;ng tại kho xuất&lt;br/&gt;tồn giữ chỗ + số lượng]
+  C11 --&gt; C12{Trả trước v&#224; kh&#225;ch&lt;br/&gt;đ&#227; thanh to&#225;n online?}
+  C12 --&gt;|C&#243;| C13[Tự ghi phiếu thu THANH_CONG]
+  C12 --&gt;|Kh&#244;ng| C14
+  C13 --&gt; C14[Mở trang chi tiết đơn]
+  C14 --&gt; E([Kết th&#250;c: đơn đ&#227; x&#225;c nhận, chờ đ&#243;ng g&#243;i])
+
+  classDef nv fill:#e8f1ff,stroke:#3b6fd8,color:#10264f;
+  classDef sys fill:#eefaf1,stroke:#2f9a55,color:#0f3a1f;
+  classDef bad fill:#fdecec,stroke:#c94040,color:#4a1111;
+  classDef ext fill:#fff5e5,stroke:#d08a1a,color:#4a2e00;
+  class A1,A2,A3,A4,A5,A6,Q7,P1,P2 nv;
+  class Q1,Q2,Q3,Q4,Q5,Q8,D1,C1,C2,C3,C4,C6,C7,C8,C9,C10,C11,C12,C13,C14 sys;
+  class Q6,C5 bad;
+  class W1 ext;
+</pre>
+<script type="module">import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs';mermaid.initialize({startOnLoad:true,flowchart:{htmlLabels:true}});</script>
+</body></html>

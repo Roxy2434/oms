@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShopVui Việt Nam | Mua Sắm Online Giá Tốt</title>
+  <meta name="description" content="ShopVui – website mô phỏng sàn thương mại điện tử, phục vụ tiểu luận/học tập.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 52'%3E%3Cpath d='M15.5 15a8.5 8.5 0 0 1 17 0' fill='none' stroke='%23f4511e' stroke-width='3.4' stroke-linecap='round'/%3E%3Cpath d='M6.5 15h35l-2.3 31.3a4 4 0 0 1-4 3.7H12.8a4 4 0 0 1-4-3.7z' fill='%23f4511e'/%3E%3Cpath d='M16.5 29.5c2 4.3 4.6 6.4 7.5 6.4s5.5-2.1 7.5-6.4' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div id="header"></div>
+  <main id="app"></main>
+  <div id="footer"></div>
+  <div id="chat-root"></div>
+  <div id="modal-root"></div>
+  <div id="toast-root" aria-live="polite"></div>
+  <noscript><p style="padding:40px;text-align:center">Vui lòng bật JavaScript để sử dụng ShopVui.</p></noscript>
+
+  <!-- Dữ liệu mẫu (chỉ đọc) -->
+  <script src="assets/js/data.js"></script>
+  <!-- Shop của mình: sản phẩm và cấu hình kết nối hệ thống OMS -->
+  <script src="assets/js/oms-shop.js"></script>
+  <!-- Tầng lõi: tiện ích, CSDL LocalStorage, truy vấn danh mục, nghiệp vụ -->
+  <script src="assets/js/core/utils.js"></script>
+  <script src="assets/js/core/db.js"></script>
+  <script src="assets/js/core/catalog.js"></script>
+  <script src="assets/js/core/services.js"></script>
+  <script src="assets/js/core/oms.js"></script>
+  <!-- Tầng giao diện dùng chung -->
+  <script src="assets/js/ui/icons.js"></script>
+  <script src="assets/js/ui/components.js"></script>
+  <script src="assets/js/ui/layout.js"></script>
+  <!-- Các trang -->
+  <script src="assets/js/pages/home.js"></script>
+  <script src="assets/js/pages/search.js"></script>
+  <script src="assets/js/pages/product.js"></script>
+  <script src="assets/js/pages/cart.js"></script>
+  <script src="assets/js/pages/checkout.js"></script>
+  <script src="assets/js/pages/auth.js"></script>
+  <script src="assets/js/pages/user.js"></script>
+  <script src="assets/js/pages/seller.js"></script>
+  <script src="assets/js/pages/misc.js"></script>
+  <!-- Điều hướng & khởi động -->
+  <script src="assets/js/router.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

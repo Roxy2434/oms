@@ -1,0 +1,10 @@
+ALTER TABLE "SKU" ADD CONSTRAINT sku_positive CHECK ("gia_ban" >= 0 AND "khoi_luong_gram" > 0);
+ALTER TABLE "TON_KHO" ADD CONSTRAINT stock_nonnegative CHECK ("ton_ban_duoc" >= 0 AND "dang_giu" >= 0 AND "ton_an_toan" >= 0 AND "cho_qc" >= 0 AND "cach_ly" >= 0 AND "ton_ban_duoc" >= "dang_giu");
+ALTER TABLE "DON_HANG" ADD CONSTRAINT order_fee_positive CHECK ("phi_giao_khach_tra" >= 0);
+ALTER TABLE "DONG_DON" ADD CONSTRAINT order_line_positive CHECK ("so_luong" BETWEEN 1 AND 5 AND "don_gia_chup" >= 0);
+ALTER TABLE "DONG_KIEN" ADD CONSTRAINT shipment_line_positive CHECK ("so_luong" > 0);
+ALTER TABLE "KIEN_HANG" ADD CONSTRAINT shipment_money_positive CHECK ("cuoc_du_kien" >= 0 AND "phi_dong_goi" >= 0 AND "cod_phan_bo" >= 0);
+ALTER TABLE "DONG_TRA" ADD CONSTRAINT return_quantities_valid CHECK ("luong_yeu_cau" > 0 AND "luong_duyet" BETWEEN 0 AND "luong_yeu_cau" AND "luong_nhan" BETWEEN 0 AND "luong_duyet" AND "luong_dat" >= 0 AND "luong_loi" >= 0 AND "luong_dat" + "luong_loi" <= "luong_nhan" AND "luong_duyet_hoan" BETWEEN 0 AND "luong_nhan" AND ("qc_luc" IS NULL OR "luong_dat" + "luong_loi" = "luong_nhan"));
+ALTER TABLE "GIAO_DICH_TIEN" ADD CONSTRAINT transaction_positive CHECK ("so_tien" > 0);
+ALTER TABLE "GIAO_DICH_TIEN" ADD CONSTRAINT cod_has_shipment CHECK ("nguon" != 'COD_MO_PHONG' OR "kien_id" IS NOT NULL);
+ALTER TABLE "HO_SO_TRA" ADD CONSTRAINT waived_nonnegative CHECK ("waivedAmount" >= 0);

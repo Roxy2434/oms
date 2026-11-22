@@ -1,0 +1,6 @@
+import {notFound,redirect} from 'next/navigation';
+import {resolveOrderId} from '@/domain/orders/identifiers';
+import {requireAccount} from '@/server/auth';
+import {db} from '@/server/db';
+import {DraftForm} from '@/features/orders/draft-form';
+export default async function Page({params}:{params:Promise<{id:string}>}){await requireAccount();const {id:requestedId}=await params;const id=resolveOrderId(requestedId);if(id!==requestedId)redirect(`/orders/${id}/edit`);const [o,customers,skus]=await Promise.all([db.order.findUnique({where:{id},include:{lines:true}}),db.customer.findMany({orderBy:{name:'asc'}}),db.sku.findMany({where:{active:true},orderBy:{name:'asc'}})]);if(!o||!['NHAP','CHO_HANG'].includes(o.status))notFound();return <><div className="page-heading"><div><h1>Sửa đơn {id}</h1><p>Máy chủ kiểm phiên bản và chặn sửa sau khi thu tiền.</p></div></div><DraftForm customers={customers.map(c=>({id:c.id,name:c.name,phone:c.phone,address:c.address??'',city:c.city}))} skus={skus.map(s=>({id:s.id,name:s.name,price:s.price.toFixed(0)}))} initial={{shippingPolicy:o.shippingPolicy,id:o.id,version:o.version,customerId:o.customerId,recipient:o.recipient,phone:o.phone,address:o.address,channel:o.channel,region:o.region,paymentMethod:o.paymentMethod,shippingFee:Number(o.shippingFee),lines:o.lines.map(l=>({skuId:l.skuId,quantity:l.quantity}))}}/></>;}

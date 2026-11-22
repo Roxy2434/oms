@@ -1,0 +1,6 @@
+.env
+node_modules/
+.next/
+backend/src/generated/
+backend/storage/
+*.log

@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="OMS_Definitions" targetNamespace="https://oms.local/coursework">
+ <bpmn:documentation>Design diagram, not an executable engine. DOM uses offline estimates. Payment behavior and external carrier/platform integrations are explicitly outside the 13 November 2026 changes. Timers depict the deadline exception checked by commands, not a deployed background scheduler.</bpmn:documentation>
+ <bpmn:collaboration id="OMS_Collaboration">
+  <bpmn:participant id="DOM_Pool" name="OMS — DOM / giao nhận nội bộ" processRef="DOM_Process"/>
+  <bpmn:participant id="RMA_Pool" name="OMS — RMA / kho / hồ sơ nội bộ" processRef="RMA_Process"/>
+  <bpmn:messageFlow id="returnMessage" name="Kiện nguồn + lượng + kho nhận" sourceRef="openReturn" targetRef="rmaStart"/>
+ </bpmn:collaboration>
+ <bpmn:process id="DOM_Process" name="Phân bổ và xử lý ngoại lệ giao hàng" isExecutable="false">
+  <bpmn:laneSet id="DOM_Lanes"><bpmn:lane id="OMS_Lane" name="OMS — tự động"><bpmn:flowNodeRef>domStart</bpmn:flowNodeRef><bpmn:flowNodeRef>allocate</bpmn:flowNodeRef><bpmn:flowNodeRef>planGateway</bpmn:flowNodeRef><bpmn:flowNodeRef>waitStock</bpmn:flowNodeRef><bpmn:flowNodeRef>waitEnd</bpmn:flowNodeRef></bpmn:lane><bpmn:lane id="Fulfillment_Lane" name="Nhân viên kho / giao nhận mô phỏng"><bpmn:flowNodeRef>fulfill</bpmn:flowNodeRef><bpmn:flowNodeRef>slaBoundary</bpmn:flowNodeRef><bpmn:flowNodeRef>slaException</bpmn:flowNodeRef><bpmn:flowNodeRef>slaEnd</bpmn:flowNodeRef><bpmn:flowNodeRef>deliveryGateway</bpmn:flowNodeRef><bpmn:flowNodeRef>doneEnd</bpmn:flowNodeRef><bpmn:flowNodeRef>retryGateway</bpmn:flowNodeRef><bpmn:flowNodeRef>retryRecord</bpmn:flowNodeRef><bpmn:flowNodeRef>openReturn</bpmn:flowNodeRef><bpmn:flowNodeRef>returnEnd</bpmn:flowNodeRef></bpmn:lane></bpmn:laneSet>
+  <bpmn:startEvent id="domStart" name="Đơn phát sinh"/>
+  <bpmn:serviceTask id="allocate" name="ATP + SLA vùng; 1 kho trước; chi phí thấp nhất"><bpmn:documentation>solveAllocation, checkoutQuote/createCheckout; maximum two warehouses. Region tariff and sample timetable only; no coordinates, geocoding or distance ranking.</bpmn:documentation></bpmn:serviceTask>
+  <bpmn:exclusiveGateway id="planGateway" name="Có phương án hợp lệ?" default="d4"/>
+  <bpmn:userTask id="waitStock" name="Chờ hàng / thiếu tuyến-SLA, chưa giữ dở dang"/>
+  <bpmn:endEvent id="waitEnd" name="Chưa xác nhận"/>
+  <bpmn:subProcess id="fulfill" name="Giữ toàn đơn → đóng gói → bàn giao → ghi kết quả">
+   <bpmn:startEvent id="parcelStart"/>
+   <bpmn:userTask id="pack" name="Đóng gói, kiểm SLA còn lại"/>
+   <bpmn:userTask id="handover" name="Kiểm SLA; xuất ATP giữ đúng một lần; vận đơn từng kiện"/>
+   <bpmn:userTask id="recordDelivery" name="Ghi kết quả từng kiện (mô phỏng)"/>
+   <bpmn:endEvent id="parcelEnd"/>
+   <bpmn:sequenceFlow id="p1" sourceRef="parcelStart" targetRef="pack"/><bpmn:sequenceFlow id="p2" sourceRef="pack" targetRef="handover"/><bpmn:sequenceFlow id="p3" sourceRef="handover" targetRef="recordDelivery"/><bpmn:sequenceFlow id="p4" sourceRef="recordDelivery" targetRef="parcelEnd"/>
+  </bpmn:subProcess>
+  <bpmn:boundaryEvent id="slaBoundary" name="Hết khả năng đạt SLA" attachedToRef="fulfill" cancelActivity="true"><bpmn:conditionalEventDefinition><bpmn:condition xsi:type="bpmn:tFormalExpression">now + remainingTransitAndBuffer &gt; order.deadline</bpmn:condition></bpmn:conditionalEventDefinition></bpmn:boundaryEvent>
+  <bpmn:userTask id="slaException" name="Chặn xuất; xử lý ngoại lệ / hủy trước xuất và lập lại"/>
+  <bpmn:endEvent id="slaEnd" name="Không tự gia hạn / hứa giao"/>
+  <bpmn:exclusiveGateway id="deliveryGateway" name="Giao thành công?" default="d8"/>
+  <bpmn:endEvent id="doneEnd" name="Ghi giao thực tế; báo cáo đúng hạn/trễ"/>
+  <bpmn:exclusiveGateway id="retryGateway" name="Giao lại hay chuyển hoàn?" default="d11"/>
+  <bpmn:userTask id="retryRecord" name="Giao lại: đổi trạng thái, không xuất tồn lần hai"/>
+  <bpmn:sendTask id="openReturn" name="Chuyển hoàn: yêu cầu RMA theo kho nguồn"><bpmn:documentation>Internal handoff only; no carrier API is called.</bpmn:documentation></bpmn:sendTask>
+  <bpmn:endEvent id="returnEnd" name="Theo dõi hồ sơ hoàn"/>
+  <bpmn:sequenceFlow id="d1" sourceRef="domStart" targetRef="allocate"/><bpmn:sequenceFlow id="d2" sourceRef="allocate" targetRef="planGateway"/>
+  <bpmn:sequenceFlow id="d3" name="Có" sourceRef="planGateway" targetRef="fulfill"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">plan != null</bpmn:conditionExpression></bpmn:sequenceFlow>
+  <bpmn:sequenceFlow id="d4" name="Không" sourceRef="planGateway" targetRef="waitStock"/><bpmn:sequenceFlow id="d5" sourceRef="waitStock" targetRef="waitEnd"/>
+  <bpmn:sequenceFlow id="d6" sourceRef="fulfill" targetRef="deliveryGateway"/>
+  <bpmn:sequenceFlow id="d7" name="Có" sourceRef="deliveryGateway" targetRef="doneEnd"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">delivered</bpmn:conditionExpression></bpmn:sequenceFlow>
+  <bpmn:sequenceFlow id="d8" name="Thất bại, lưu lý do" sourceRef="deliveryGateway" targetRef="retryGateway"/>
+  <bpmn:sequenceFlow id="d9" sourceRef="slaBoundary" targetRef="slaException"/><bpmn:sequenceFlow id="d10" sourceRef="slaException" targetRef="slaEnd"/>
+  <bpmn:sequenceFlow id="d11" name="Chuyển hoàn" sourceRef="retryGateway" targetRef="openReturn"/>
+  <bpmn:sequenceFlow id="d12" name="Giao lại — không xuất tồn lần hai" sourceRef="retryGateway" targetRef="retryRecord"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">retryDelivery</bpmn:conditionExpression></bpmn:sequenceFlow>
+  <bpmn:sequenceFlow id="d14" sourceRef="retryRecord" targetRef="deliveryGateway"/>
+  <bpmn:sequenceFlow id="d13" sourceRef="openReturn" targetRef="returnEnd"/>
+ </bpmn:process>
+ <bpmn:process id="RMA_Process" name="Hàng hoàn và kiểm định" isExecutable="false">
+  <bpmn:startEvent id="rmaStart" name="Khách trả / kiện chuyển hoàn"><bpmn:messageEventDefinition/></bpmn:startEvent>
+  <bpmn:userTask id="rmaOpen" name="RMA + vận đơn hoàn; kiểm lượng nguồn, duyệt"/>
+  <bpmn:userTask id="receive" name="Nhận đúng kho nguồn; ghi thiếu/sai và kết luận"/>
+  <bpmn:userTask id="qc" name="QC một lần: đạt + lỗi = thực nhận"/>
+  <bpmn:serviceTask id="disposition" name="Đạt → ATP; lỗi → cách ly; có sổ biến động"/>
+  <bpmn:exclusiveGateway id="claimGateway" name="Hỏng/mất do vận chuyển?" default="r7"/>
+  <bpmn:userTask id="claim" name="Lập BB nội bộ; nhân viên gửi ngoài và ghi trạng thái"/>
+  <bpmn:exclusiveGateway id="claimJoin"/>
+  <bpmn:callActivity id="existingFinance" name="Thu / hoàn hiện có — KHÔNG sửa trong phạm vi này"><bpmn:documentation>Existing money simulation/records; no new payout or payment gateway integration. Successful ledger records do not prove real payouts.</bpmn:documentation></bpmn:callActivity>
+  <bpmn:exclusiveGateway id="closeGateway" name="Hàng và nghĩa vụ hiện có đã chốt?" default="r12"/>
+  <bpmn:userTask id="waitReconcile" name="Chờ tra soát; không lập trùng / không đóng ép"/>
+  <bpmn:endEvent id="rmaEnd" name="Đóng hồ sơ; giữ lịch sử truy vết"/>
+  <bpmn:sequenceFlow id="r1" sourceRef="rmaStart" targetRef="rmaOpen"/><bpmn:sequenceFlow id="r2" sourceRef="rmaOpen" targetRef="receive"/><bpmn:sequenceFlow id="r3" sourceRef="receive" targetRef="qc"/><bpmn:sequenceFlow id="r4" sourceRef="qc" targetRef="disposition"/><bpmn:sequenceFlow id="r5" sourceRef="disposition" targetRef="claimGateway"/>
+  <bpmn:sequenceFlow id="r6" name="Có" sourceRef="claimGateway" targetRef="claim"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">carrierDamageOrLoss</bpmn:conditionExpression></bpmn:sequenceFlow>
+  <bpmn:sequenceFlow id="r7" name="Không" sourceRef="claimGateway" targetRef="claimJoin"/><bpmn:sequenceFlow id="r8" sourceRef="claim" targetRef="claimJoin"/><bpmn:sequenceFlow id="r9" sourceRef="claimJoin" targetRef="existingFinance"/><bpmn:sequenceFlow id="r10" sourceRef="existingFinance" targetRef="closeGateway"/>
+  <bpmn:sequenceFlow id="r11" name="Đủ điều kiện" sourceRef="closeGateway" targetRef="rmaEnd"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">allLinesInspectedAndExistingObligationsResolved</bpmn:conditionExpression></bpmn:sequenceFlow>
+  <bpmn:sequenceFlow id="r12" name="Chưa đủ / chưa rõ" sourceRef="closeGateway" targetRef="waitReconcile"/><bpmn:sequenceFlow id="r13" sourceRef="waitReconcile" targetRef="existingFinance"/>
+ </bpmn:process>
+<bpmndi:BPMNDiagram id="OMS_Diagram"><bpmndi:BPMNPlane id="OMS_Plane" bpmnElement="OMS_Collaboration">
+<bpmndi:BPMNShape id="DOM_Pool_di" bpmnElement="DOM_Pool"><dc:Bounds x="80" y="80" width="1800" height="480"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="OMS_Lane_di" bpmnElement="OMS_Lane"><dc:Bounds x="110" y="80" width="1770" height="140"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="Fulfillment_Lane_di" bpmnElement="Fulfillment_Lane"><dc:Bounds x="110" y="220" width="1770" height="340"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="domStart_di" bpmnElement="domStart"><dc:Bounds x="160" y="125" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="allocate_di" bpmnElement="allocate"><dc:Bounds x="260" y="100" width="180" height="85"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="planGateway_di" bpmnElement="planGateway"><dc:Bounds x="500" y="120" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="waitStock_di" bpmnElement="waitStock"><dc:Bounds x="640" y="100" width="190" height="85"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="waitEnd_di" bpmnElement="waitEnd"><dc:Bounds x="900" y="125" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="fulfill_di" bpmnElement="fulfill" isExpanded="false"><dc:Bounds x="640" y="270" width="190" height="85"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="slaBoundary_di" bpmnElement="slaBoundary"><dc:Bounds x="790" y="337" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="slaException_di" bpmnElement="slaException"><dc:Bounds x="880" y="455" width="200" height="70"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="slaEnd_di" bpmnElement="slaEnd"><dc:Bounds x="1150" y="472" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="deliveryGateway_di" bpmnElement="deliveryGateway"><dc:Bounds x="950" y="280" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="doneEnd_di" bpmnElement="doneEnd"><dc:Bounds x="1120" y="245" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="retryGateway_di" bpmnElement="retryGateway"><dc:Bounds x="1120" y="360" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="retryRecord_di" bpmnElement="retryRecord"><dc:Bounds x="1350" y="260" width="200" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="openReturn_di" bpmnElement="openReturn"><dc:Bounds x="1350" y="390" width="200" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="returnEnd_di" bpmnElement="returnEnd"><dc:Bounds x="1630" y="412" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="RMA_Pool_di" bpmnElement="RMA_Pool"><dc:Bounds x="80" y="620" width="1800" height="450"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="rmaStart_di" bpmnElement="rmaStart"><dc:Bounds x="160" y="700" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="rmaOpen_di" bpmnElement="rmaOpen"><dc:Bounds x="240" y="675" width="160" height="85"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="receive_di" bpmnElement="receive"><dc:Bounds x="440" y="675" width="160" height="85"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="qc_di" bpmnElement="qc"><dc:Bounds x="640" y="675" width="160" height="85"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="disposition_di" bpmnElement="disposition"><dc:Bounds x="840" y="675" width="180" height="85"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="claimGateway_di" bpmnElement="claimGateway"><dc:Bounds x="1060" y="695" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="claim_di" bpmnElement="claim"><dc:Bounds x="1180" y="675" width="190" height="85"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="claimJoin_di" bpmnElement="claimJoin"><dc:Bounds x="1430" y="695" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="existingFinance_di" bpmnElement="existingFinance"><dc:Bounds x="1220" y="880" width="220" height="85"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="closeGateway_di" bpmnElement="closeGateway"><dc:Bounds x="1500" y="895" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="waitReconcile_di" bpmnElement="waitReconcile"><dc:Bounds x="1580" y="780" width="210" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="rmaEnd_di" bpmnElement="rmaEnd"><dc:Bounds x="1680" y="900" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNEdge id="d1_di" bpmnElement="d1"><di:waypoint x="196" y="143"/><di:waypoint x="260" y="142.5"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d2_di" bpmnElement="d2"><di:waypoint x="440" y="142.5"/><di:waypoint x="500" y="145"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d3_di" bpmnElement="d3"><di:waypoint x="550" y="145"/><di:waypoint x="640" y="312.5"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d4_di" bpmnElement="d4"><di:waypoint x="550" y="145"/><di:waypoint x="640" y="142.5"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d5_di" bpmnElement="d5"><di:waypoint x="830" y="142.5"/><di:waypoint x="900" y="143"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d6_di" bpmnElement="d6"><di:waypoint x="830" y="312.5"/><di:waypoint x="950" y="305"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d7_di" bpmnElement="d7"><di:waypoint x="1000" y="305"/><di:waypoint x="1120" y="263"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d8_di" bpmnElement="d8"><di:waypoint x="1000" y="305"/><di:waypoint x="1120" y="385"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d9_di" bpmnElement="d9"><di:waypoint x="826" y="355"/><di:waypoint x="880" y="490"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d10_di" bpmnElement="d10"><di:waypoint x="1080" y="490"/><di:waypoint x="1150" y="490"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d11_di" bpmnElement="d11"><di:waypoint x="1170" y="385"/><di:waypoint x="1350" y="430"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d12_di" bpmnElement="d12"><di:waypoint x="1170" y="385"/><di:waypoint x="1350" y="300"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d14_di" bpmnElement="d14"><di:waypoint x="1550" y="300"/><di:waypoint x="950" y="305"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="d13_di" bpmnElement="d13"><di:waypoint x="1550" y="430"/><di:waypoint x="1630" y="430"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="returnMessage_di" bpmnElement="returnMessage"><di:waypoint x="1550" y="430"/><di:waypoint x="160" y="718"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r1_di" bpmnElement="r1"><di:waypoint x="196" y="718"/><di:waypoint x="240" y="717.5"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r2_di" bpmnElement="r2"><di:waypoint x="400" y="717.5"/><di:waypoint x="440" y="717.5"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r3_di" bpmnElement="r3"><di:waypoint x="600" y="717.5"/><di:waypoint x="640" y="717.5"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r4_di" bpmnElement="r4"><di:waypoint x="800" y="717.5"/><di:waypoint x="840" y="717.5"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r5_di" bpmnElement="r5"><di:waypoint x="1020" y="717.5"/><di:waypoint x="1060" y="720"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r6_di" bpmnElement="r6"><di:waypoint x="1110" y="720"/><di:waypoint x="1180" y="717.5"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r7_di" bpmnElement="r7"><di:waypoint x="1110" y="720"/><di:waypoint x="1430" y="720"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r8_di" bpmnElement="r8"><di:waypoint x="1370" y="717.5"/><di:waypoint x="1430" y="720"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r9_di" bpmnElement="r9"><di:waypoint x="1480" y="720"/><di:waypoint x="1220" y="922.5"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r10_di" bpmnElement="r10"><di:waypoint x="1440" y="922.5"/><di:waypoint x="1500" y="920"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r11_di" bpmnElement="r11"><di:waypoint x="1550" y="920"/><di:waypoint x="1680" y="918"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r12_di" bpmnElement="r12"><di:waypoint x="1550" y="920"/><di:waypoint x="1580" y="820"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="r13_di" bpmnElement="r13"><di:waypoint x="1790" y="820"/><di:waypoint x="1220" y="922.5"/></bpmndi:BPMNEdge>
+</bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>

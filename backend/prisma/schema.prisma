@@ -1,0 +1,418 @@
+generator client {
+  provider = "prisma-client"
+  output = "../src/generated/prisma"
+}
+datasource db {
+  provider = "postgresql"
+}
+enum Role {
+  NHAN_VIEN
+  QUAN_LY
+}
+enum OrderStatus {
+  NHAP
+  CHO_HANG
+  DA_XAC_NHAN
+  DA_HUY
+}
+enum Channel {
+  NHAP_TAY
+  WEBSITE
+  SHOPEE
+  TIKTOK
+  SHOPVUI
+}
+enum PaymentMethod {
+  TRA_TRUOC
+  COD
+}
+enum ShipmentStatus {
+  DANG_GIU
+  CHO_BAN_GIAO
+  DANG_GIAO
+  DA_GIAO
+  GIAO_THAT_BAI
+  CHUYEN_HOAN
+  DA_NHAN_HOAN
+  HUY
+}
+enum ReturnKind {
+  KHACH_TRA
+  CHUYEN_HOAN
+}
+enum ReturnStatus {
+  CHO_DUYET
+  TU_CHOI
+  CHO_NHAN
+  CHO_QC
+  CHO_HOAN_TIEN
+  DA_DONG
+}
+enum TransactionKind {
+  THU
+  HOAN
+}
+enum TransactionStatus {
+  CHO_XAC_NHAN
+  THANH_CONG
+  THAT_BAI
+  CHUA_RO
+}
+enum TransactionSource {
+  TIEN_MAT
+  CHUYEN_KHOAN
+  COD_MO_PHONG
+}
+enum TransactionReason {
+  THU_TRA_TRUOC
+  THU_COD
+  THU_PHI_CON_THIEU
+  HOAN_HUY
+  HOAN_RMA
+  HOAN_BU_THU_SAI
+  THU_BU_HOAN_SAI
+}
+enum MovementKind {
+  NHAP
+  GIU
+  GIAI_PHONG
+  XUAT
+  NHAN_HOAN
+  QC
+  DIEU_CHINH
+}
+model Account {
+  id String @id @default(cuid())
+  name String @map("ho_ten")
+  username String @unique @map("ten_dang_nhap")
+  passwordHash String @map("mat_khau_bam")
+  role Role @map("vai_tro")
+  active Boolean @default(true) @map("dang_hoat_dong")
+  sessionVersion Int @default(1) @map("phien_ban_phien")
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  orders Order[]
+  shipments Shipment[]
+  createdReturns ReturnCase[] @relation("ReturnCreator")
+  approvedReturns ReturnCase[] @relation("ReturnApprover")
+  qcLines ReturnLine[]
+  recordedTransactions MoneyTransaction[] @relation("MoneyRecorder")
+  approvedTransactions MoneyTransaction[] @relation("MoneyApprover")
+  movements InventoryMovement[] @relation("MovementActor")
+  approvedMovements InventoryMovement[] @relation("MovementApprover")
+  audits AuditLog[]
+  @@map("TAI_KHOAN")
+}
+model Customer {
+  id String @id @default(cuid())
+  name String @map("ho_ten")
+  phone String @map("so_dien_thoai")
+  email String?
+  address String? @map("dia_chi_mac_dinh")
+  city String? @map("tinh_thanh")
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  orders Order[]
+  @@index([phone])
+  @@map("KHACH_HANG")
+}
+model Sku {
+  id String @id
+  name String @map("ten_san_pham")
+  variant String? @map("bien_the")
+  category String @map("nhom_hang")
+  price Decimal @db.Decimal(14,0) @map("gia_ban")
+  weightGrams Int @map("khoi_luong_gram")
+  active Boolean @default(true) @map("dang_kinh_doanh")
+  inventory Inventory[]
+  orderLines OrderLine[]
+  movements InventoryMovement[]
+  @@map("SKU")
+}
+model Warehouse {
+  id String @id
+  name String @map("ten_kho")
+  address String @map("dia_chi")
+  region String @map("vung_xuat")
+  latitude Float? @map("vi_do")
+  longitude Float? @map("kinh_do")
+  packingFee Int? @map("phi_dong_goi")
+  handlingHours Float @default(2) @map("gio_xu_ly")
+  queueHours Float @default(0) @map("gio_cho")
+  active Boolean @default(true) @map("dang_hoat_dong")
+  inventory Inventory[]
+  shipments Shipment[]
+  returns ReturnCase[]
+  movements InventoryMovement[]
+  @@map("KHO")
+}
+model Inventory {
+  warehouseId String @map("kho_id")
+  skuId String @map("sku_id")
+  sellable Int @default(0) @map("ton_ban_duoc")
+  reserved Int @default(0) @map("dang_giu")
+  safety Int @default(0) @map("ton_an_toan")
+  qc Int @default(0) @map("cho_qc")
+  quarantined Int @default(0) @map("cach_ly")
+  version Int @default(1) @map("phien_ban")
+  updatedAt DateTime @updatedAt @map("cap_nhat_luc") @db.Timestamptz(3)
+  warehouse Warehouse @relation(fields:[warehouseId],references:[id],onDelete:Restrict)
+  sku Sku @relation(fields:[skuId],references:[id],onDelete:Restrict)
+  @@id([warehouseId,skuId])
+  @@map("TON_KHO")
+}
+model Order {
+  id String @id @default(cuid())
+  shippingPolicy String @default("MANUAL") @map("chinh_sach_phi_giao")
+  customerId String @map("khach_hang_id")
+  channel Channel @map("kenh_ban")
+  externalId String? @map("ma_don_ngoai")
+  storefrontRecoveryHash String? @map("bam_khoa_khoi_phuc")
+  recipient String @map("ten_nguoi_nhan")
+  phone String @map("sdt_nguoi_nhan")
+  address String @map("dia_chi_giao")
+  region String @map("vung_giao")
+  latitude Float? @map("vi_do")
+  longitude Float? @map("kinh_do")
+  paymentMethod PaymentMethod @map("phuong_thuc_thanh_toan")
+  shippingFee Decimal @db.Decimal(14,0) @map("phi_giao_khach_tra")
+  status OrderStatus @default(NHAP) @map("trang_thai")
+  reason String? @map("ly_do_cho_huy")
+  deadline DateTime? @map("han_giao") @db.Timestamptz(3)
+  confirmedAt DateTime? @map("xac_nhan_luc") @db.Timestamptz(3)
+  createdById String @map("nguoi_tao_id")
+  version Int @default(1)
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("cap_nhat_luc") @db.Timestamptz(3)
+  customer Customer @relation(fields:[customerId],references:[id],onDelete:Restrict)
+  createdBy Account @relation(fields:[createdById],references:[id],onDelete:Restrict)
+  lines OrderLine[]
+  shipments Shipment[]
+  returns ReturnCase[]
+  transactions MoneyTransaction[]
+  @@unique([channel,externalId])
+  @@index([createdAt,status,channel])
+  @@index([status,updatedAt])
+  @@map("DON_HANG")
+}
+model OrderLine {
+  id String @id @default(cuid())
+  orderId String @map("don_hang_id")
+  skuId String @map("sku_id")
+  nameSnapshot String @map("ten_hang_chup")
+  quantity Int @map("so_luong")
+  priceSnapshot Decimal @db.Decimal(14,0) @map("don_gia_chup")
+  order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  sku Sku @relation(fields:[skuId],references:[id],onDelete:Restrict)
+  shipmentLines ShipmentLine[]
+  @@unique([orderId,skuId])
+  @@map("DONG_DON")
+}
+model Shipment {
+  id String @id @default(cuid())
+  orderId String @map("don_hang_id")
+  warehouseId String @map("kho_id")
+  status ShipmentStatus @default(DANG_GIU) @map("trang_thai")
+  trackingCode String? @map("ma_van_don")
+  freight Decimal @db.Decimal(14,0) @map("cuoc_du_kien")
+  packingFee Decimal @db.Decimal(14,0) @map("phi_dong_goi")
+  eta DateTime @map("du_kien_giao") @db.Timestamptz(3)
+  allocationEvidence Json @map("can_cu_chon_kho")
+  codAmount Decimal @db.Decimal(14,0) @map("cod_phan_bo")
+  reason String? @map("ly_do_trang_thai")
+  handedOverAt DateTime? @map("ban_giao_luc") @db.Timestamptz(3)
+  deliveredAt DateTime? @map("giao_luc") @db.Timestamptz(3)
+  updatedById String @map("nguoi_cap_nhat_id")
+  version Int @default(1)
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("cap_nhat_luc") @db.Timestamptz(3)
+  order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  warehouse Warehouse @relation(fields:[warehouseId],references:[id],onDelete:Restrict)
+  updatedBy Account @relation(fields:[updatedById],references:[id],onDelete:Restrict)
+  lines ShipmentLine[]
+  transactions MoneyTransaction[]
+  @@unique([orderId,warehouseId])
+  @@index([warehouseId,status])
+  @@map("KIEN_HANG")
+}
+model ShipmentLine {
+  id String @id @default(cuid())
+  shipmentId String @map("kien_id")
+  orderLineId String @map("dong_don_id")
+  quantity Int @map("so_luong")
+  shipment Shipment @relation(fields:[shipmentId],references:[id],onDelete:Restrict)
+  orderLine OrderLine @relation(fields:[orderLineId],references:[id],onDelete:Restrict)
+  returnLines ReturnLine[]
+  @@unique([shipmentId,orderLineId])
+  @@index([orderLineId])
+  @@map("DONG_KIEN")
+}
+model ReturnCase {
+  id String @id @default(cuid())
+  orderId String @map("don_hang_id")
+  kind ReturnKind @map("loai")
+  warehouseId String @map("kho_nhan_id")
+  reason String @map("ly_do")
+  status ReturnStatus @default(CHO_DUYET) @map("trang_thai")
+  trackingCode String? @map("ma_van_don_hoan")
+  code String? @unique @map("ma_rma")
+  createdById String @map("nguoi_tao_id")
+  approvedById String? @map("nguoi_duyet_id")
+  conclusion String? @map("ket_luan_xu_ly")
+  resolution Json?
+  waivedAmount Decimal @default(0) @db.Decimal(14,0)
+  version Int @default(1)
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  approvedAt DateTime? @map("duyet_luc") @db.Timestamptz(3)
+  closedAt DateTime? @map("dong_luc") @db.Timestamptz(3)
+  order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  warehouse Warehouse @relation(fields:[warehouseId],references:[id],onDelete:Restrict)
+  createdBy Account @relation("ReturnCreator",fields:[createdById],references:[id],onDelete:Restrict)
+  approvedBy Account? @relation("ReturnApprover",fields:[approvedById],references:[id],onDelete:Restrict)
+  lines ReturnLine[]
+  transactions MoneyTransaction[]
+  claims CarrierClaim[]
+  customerNote String? @map("ghi_chu_khach")
+  photos ReturnPhoto[]
+  @@index([orderId,status])
+  @@map("HO_SO_TRA")
+}
+model ReturnLine {
+  id String @id @default(cuid())
+  returnId String @map("ho_so_tra_id")
+  shipmentLineId String @map("dong_kien_id")
+  requested Int @map("luong_yeu_cau")
+  approved Int @default(0) @map("luong_duyet")
+  received Int @default(0) @map("luong_nhan")
+  passed Int @default(0) @map("luong_dat")
+  failed Int @default(0) @map("luong_loi")
+  refundQuantity Int @default(0) @map("luong_duyet_hoan")
+  damageCause DamageCause? @map("nguyen_nhan_loi")
+  conclusion String? @map("ket_luan")
+  qcById String? @map("nguoi_qc_id")
+  receivedAt DateTime? @map("nhan_luc") @db.Timestamptz(3)
+  qcAt DateTime? @map("qc_luc") @db.Timestamptz(3)
+  returnCase ReturnCase @relation(fields:[returnId],references:[id],onDelete:Restrict)
+  shipmentLine ShipmentLine @relation(fields:[shipmentLineId],references:[id],onDelete:Restrict)
+  qcBy Account? @relation(fields:[qcById],references:[id],onDelete:Restrict)
+  @@unique([returnId,shipmentLineId])
+  @@index([shipmentLineId])
+  @@map("DONG_TRA")
+}
+model MoneyTransaction {
+  id String @id @default(cuid())
+  orderId String @map("don_hang_id")
+  shipmentId String? @map("kien_id")
+  returnId String? @map("ho_so_tra_id")
+  kind TransactionKind @map("loai")
+  reason TransactionReason
+  note String @map("ly_do")
+  amount Decimal @db.Decimal(14,0) @map("so_tien")
+  source TransactionSource @map("nguon")
+  reference String @map("ma_tham_chieu")
+  status TransactionStatus @default(CHO_XAC_NHAN) @map("trang_thai")
+  idempotencyKey String @unique @map("khoa_chong_trung")
+  recordedById String @map("nguoi_ghi_id")
+  approvedById String @map("nguoi_duyet_id")
+  originalId String?
+  original MoneyTransaction? @relation("Compensation",fields:[originalId],references:[id],onDelete:Restrict)
+  compensations MoneyTransaction[] @relation("Compensation")
+  version Int @default(1)
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  confirmedAt DateTime? @map("xac_nhan_luc") @db.Timestamptz(3)
+  order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  shipment Shipment? @relation(fields:[shipmentId],references:[id],onDelete:Restrict)
+  returnCase ReturnCase? @relation(fields:[returnId],references:[id],onDelete:Restrict)
+  recordedBy Account @relation("MoneyRecorder",fields:[recordedById],references:[id],onDelete:Restrict)
+  approvedBy Account @relation("MoneyApprover",fields:[approvedById],references:[id],onDelete:Restrict)
+  @@unique([source,kind,reference])
+  @@index([orderId,status])
+  @@index([status,confirmedAt])
+  @@map("GIAO_DICH_TIEN")
+}
+model InventoryMovement {
+  id String @id @default(cuid())
+  warehouseId String @map("kho_id")
+  skuId String @map("sku_id")
+  kind MovementKind @map("loai")
+  sellableDelta Int @map("delta_ban_duoc")
+  reservedDelta Int @map("delta_giu")
+  qcDelta Int @map("delta_cho_qc")
+  quarantinedDelta Int @map("delta_cach_ly")
+  documentType String @map("chung_tu_loai")
+  documentId String @map("chung_tu_id")
+  reason String @map("ly_do")
+  before Json @map("so_truoc")
+  after Json @map("so_sau")
+  actorId String @map("nguoi_thuc_hien_id")
+  approverId String @map("nguoi_duyet_id")
+  idempotencyKey String @unique @map("khoa_chong_trung")
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  warehouse Warehouse @relation(fields:[warehouseId],references:[id],onDelete:Restrict)
+  sku Sku @relation(fields:[skuId],references:[id],onDelete:Restrict)
+  actor Account @relation("MovementActor",fields:[actorId],references:[id],onDelete:Restrict)
+  approver Account @relation("MovementApprover",fields:[approverId],references:[id],onDelete:Restrict)
+  @@index([warehouseId,skuId,createdAt])
+  @@map("BIEN_DONG_TON")
+}
+model AuditLog {
+  id String @id @default(cuid())
+  actorId String? @map("tai_khoan_id")
+  entity String @map("doi_tuong")
+  entityId String @map("ma_doi_tuong")
+  action String @map("hanh_dong")
+  before Json? @map("truoc")
+  after Json? @map("sau")
+  reason String? @map("ly_do")
+  commandKey String? @unique
+  payloadHash String?
+  result Json?
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  actor Account? @relation(fields:[actorId],references:[id],onDelete:Restrict)
+  @@index([entity,entityId,createdAt])
+  @@map("NHAT_KY")
+}
+enum DamageCause {
+  VAN_CHUYEN
+  KHACH_HANG
+  SAN_XUAT
+  SHOP_GIAO_SAI
+}
+enum ClaimKind {
+  HU_HONG
+  THAT_LAC
+}
+enum ClaimStatus {
+  CHO_GUI
+  DA_GUI
+  DUOC_BOI_THUONG
+  TU_CHOI
+  KHONG_YEU_CAU
+}
+/// Biên bản bồi thường với hãng vận chuyển (3PL) cho hàng trả bị hỏng khi kiểm định.
+// Photos the customer attached to a return request (evidence for the warehouse). Stored in the DB, served only to signed-in staff.
+model ReturnPhoto {
+  id String @id @default(cuid())
+  returnId String @map("ho_so_tra_id")
+  mime String @map("loai_tep")
+  data Bytes @map("du_lieu")
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  returnCase ReturnCase @relation(fields:[returnId],references:[id],onDelete:Cascade)
+  @@index([returnId])
+  @@map("ANH_TRA")
+}
+model CarrierClaim {
+  id String @id @default(cuid())
+  code String @unique @map("ma_bien_ban")
+  returnId String @map("ho_so_tra_id")
+  skuName String @map("ten_hang")
+  quantity Int @map("so_luong")
+  amount Decimal @db.Decimal(14,0) @map("gia_tri")
+  reason String @map("ly_do")
+  kind ClaimKind @default(HU_HONG) @map("loai")
+  status ClaimStatus @default(CHO_GUI) @map("trang_thai")
+  note String? @map("ghi_chu")
+  createdAt DateTime @default(now()) @map("tao_luc") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("cap_nhat_luc") @db.Timestamptz(3)
+  returnCase ReturnCase @relation(fields:[returnId],references:[id],onDelete:Restrict)
+  @@index([returnId])
+  @@map("BIEN_BAN_BOI_THUONG")
+}
