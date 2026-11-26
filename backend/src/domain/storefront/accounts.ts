@@ -70,14 +70,14 @@ export async function shopState(accountId:string){
  const orders=purchases.map(p=>{
   const s=states.find(s=>s.orderId===p.orderId)!,o=p.order,paid=p.payment==='wallet'||s.paid===true,at=o.createdAt.toISOString();
   const a=(u.addresses as unknown as z.infer<typeof address>[]).find(a=>a.phone===o.phone&&o.address.includes(a.detail));
-  return {id:o.id,code:o.id,userId:u.id,server:true,shopId:'oms',shopName:'EZMART',items:o.lines.map(l=>({productId:'oms-'+l.skuId,name:l.nameSnapshot,image:'',emoji:'📦',variant:'',price:Number(l.priceSnapshot),originalPrice:Number(l.priceSnapshot),qty:l.quantity})),
+  return {id:o.id,code:o.id,userId:u.id,server:true,shopId:'oms',shopName:'EZMART',items:o.lines.map(l=>({productId:'oms-'+l.skuId,name:l.nameSnapshot,image:'assets/images/ezmart/'+l.skuId.toLowerCase()+'.webp',emoji:'📦',variant:'',price:Number(l.priceSnapshot),originalPrice:Number(l.priceSnapshot),qty:l.quantity})),
    address:{name:o.recipient,phone:o.phone,province:a?.province??(o.region.startsWith('HN')?'Hà Nội':o.region.startsWith('DN')?'Đà Nẵng':'TP. Hồ Chí Minh'),ward:a?.ward??'',detail:a?.detail??o.address},
    shipping:{id:'oms',name:'Giao từ kho EZMART',fee:Number(o.shippingFee),etaFrom:at,etaTo:o.deadline?.toISOString()??at},note:'',payment:{method:p.payment,label:p.payment==='wallet'?'Ví ShopVuiPay':p.payment==='bank'?'Chuyển khoản ngân hàng (SePay)':'Thanh toán khi nhận hàng (COD)',paid},
    amounts:{subtotal:o.lines.reduce((n,l)=>n+Number(l.priceSnapshot)*l.quantity,0),shopDiscount:0,platformDiscount:0,shipping:Number(o.shippingFee),shipDiscount:0,total:p.charged},vouchers:{},
    status:s.status==='CANCELLED'?'CANCELLED':s.rma?'RETURN':p.payment==='bank'&&!paid?'UNPAID':s.status,confirmed:s.stage!=='confirmed',reviewed:false,
    history:[{code:'PLACED',text:'Đơn đã chuyển tới EZMART',at},...(paid?[{code:'PAID',text:p.payment==='wallet'?'Đã thanh toán qua Ví ShopVuiPay':'SePay đã xác nhận chuyển khoản',at:o.transactions.find(t=>t.kind==='THU'&&t.status==='THANH_CONG')?.confirmedAt?.toISOString()??at}]:[]),...(o.confirmedAt?[{code:'CONFIRMED',text:'EZMART đã xác nhận và giữ hàng',at:o.confirmedAt.toISOString()}]:[]),...(s.handedOverAt?[{code:'SHIPPED',text:'Đã bàn giao vận chuyển',at:s.handedOverAt}]:[]),...(s.deliveredAt?[{code:'DELIVERED',text:'Giao hàng thành công',at:s.deliveredAt}]:[])],
    tracking:s.tracking.join(', '),cancelReason:s.status==='CANCELLED'?s.note:undefined,refunded:s.rma?.stage==='closed',createdAt:at,
-   oms:{token:orderToken(o.id),stage:s.stage,refunded:s.refunded,paidAmount:paid?p.charged:0,...(s.qr?{qr:s.qr}:{}),...(s.rma?{rma:s.rma}:{}),rtsOpen:s.rtsOpen,rtsRefunded:s.rtsRefunded}};
+   oms:{token:orderToken(o.id),stage:s.stage,refunded:s.refunded,paidAmount:paid?p.charged:0,activeItems:s.activeItems,deliveredItems:s.deliveredItems,...(s.qr?{qr:s.qr}:{}),...(s.rma?{rma:s.rma}:{}),rtsOpen:s.rtsOpen,rtsRefunded:s.rtsRefunded}};
  });
  return {user:{id:u.id,username:u.username,email:u.email??'',phone:u.phone??'',name:u.name,gender:u.gender,birthday:u.birthday,createdAt:u.createdAt,server:true},balance:u.balance,
   addresses:(u.addresses as unknown as z.infer<typeof address>[]).map(a=>({...a,userId:u.id})),orders,
