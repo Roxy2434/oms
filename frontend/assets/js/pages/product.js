@@ -58,8 +58,8 @@
           });
           return `<div class="ship-line">${SV.icon('truck', 18)}<div>
           <div>Vận chuyển tới <a class="ship-to" data-act="ship-to">${U.esc(shipTo)} ${SV.icon('down', 12)}</a></div>
-          <div class="muted">${o ? 'Phí vận chuyển: ' + U.money(o.fee) + ' · giao từ kho EZMART phù hợp theo vùng' : st.state === 'error' ? U.esc(st.error || 'Kho tạm hết hàng cho sản phẩm này') : 'Đang tính phí giao từ kho EZMART…'}</div>
-          ${o ? `<div class="muted">${o.note}</div>` : ''}</div></div>`;
+          <div class="muted">${o ? 'Phí vận chuyển: ' + U.money(o.fee) + ' · ' + U.esc(o.name) : st.state === 'error' ? U.esc(st.error || 'Kho tạm hết hàng cho sản phẩm này') : 'Đang tính phí giao từ kho EZMART…'}</div>
+          ${o ? `<div class="muted">Dự kiến nhận ${U.fmtDay(new Date(o.etaTo))} (trong ~${Math.ceil(o.etaHours || 24)} giờ)</div>` : ''}</div></div>`;
         }
         const opt = SV.checkout.shippingOptions(shop, { province: shipTo }, 1)[0];
         const free = (p.labels || []).includes('freeship');

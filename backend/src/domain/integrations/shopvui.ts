@@ -60,7 +60,8 @@ export async function catalog(){
 }
 export async function quote(raw:unknown){
  const p=quoteInput.parse(raw);const q=await checkoutQuote({city:cityOf(p.address.province),address:text(p.address),lines:lines(p.items)});
- return {ok:q.shippingFee!==null,shippingFee:q.shippingFee,goods:q.goods,total:q.total,parcels:q.plan?.parcels.length??0,reasons:q.reasons};
+ const minEta=q.plan?.parcels.length?Math.min(...q.plan.parcels.map(x=>x.etaHours)):null;
+ return {ok:q.shippingFee!==null,shippingFee:q.shippingFee,goods:q.goods,total:q.total,parcels:q.plan?.parcels.length??0,etaHours:q.plan?.etaHours??null,minEtaHours:minEta,warehouses:q.plan?.parcels.map(x=>x.warehouseName)??[],reasons:q.reasons};
 }
 
 export async function placeOrder(raw:unknown,buyerId?:string){

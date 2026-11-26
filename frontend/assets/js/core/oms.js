@@ -64,14 +64,19 @@
   function shippingOption(address, lines) {
     const key = quoteKey(address, lines);
     const q = quotes.get(key);
-    if (q && q.state === 'ok') return { id: 'oms', name: 'Giao từ kho EZMART', fee: q.fee, etaFrom: q.etaFrom, etaTo: q.etaTo, note: q.note };
+    if (q && q.state === 'ok') return { id: 'oms', name: q.name, fee: q.fee, etaFrom: q.etaFrom, etaTo: q.etaTo, etaHours: q.etaHours, note: q.note };
     if (!q) {
       quotes.set(key, { state: 'loading' });
       call('POST', 'quote', { address: addr(address), items: items(lines) })
         .then((r) => {
-          const today = new Date();
+          const nowMs = Date.now();
+          const maxH = r.etaHours || 24;
+          const minH = r.minEtaHours || maxH;
+          const whs = Array.isArray(r.warehouses) && r.warehouses.length ? r.warehouses : [];
+          const name = r.parcels > 1 && whs.length ? `Giao từ ${r.parcels} kho (${whs.join(', ')})` : whs[0] ? `Giao từ ${whs[0]}` : 'Giao từ kho EZMART';
+          const note = r.parcels > 1 ? `Tách ${r.parcels} kiện tự động · Dự kiến hoàn tất ~${Math.ceil(maxH)} giờ` : `Xuất kho trực tiếp · Dự kiến giao ~${Math.ceil(maxH)} giờ`;
           quotes.set(key, r.ok
-            ? { state: 'ok', fee: r.shippingFee, etaFrom: today.toISOString(), etaTo: SV.U.addDays(today, 1).toISOString(), note: r.parcels > 1 ? `Ước tính giao từ ${r.parcels} kho theo vùng và bảng phí/SLA mẫu` : 'Ước tính giao từ kho phù hợp theo vùng và bảng phí mẫu' }
+            ? { state: 'ok', name, fee: r.shippingFee, etaHours: maxH, etaFrom: new Date(nowMs + minH * 3600000).toISOString(), etaTo: new Date(nowMs + maxH * 3600000).toISOString(), note }
             : { state: 'error', error: (r.reasons || []).join(' ') || 'Kho chưa đủ hàng cho đơn này' });
         })
         .catch((e) => quotes.set(key, { state: 'error', error: e.message }))

@@ -9,7 +9,12 @@
   const ui = SV.ui;
   SV.state = SV.state || { platformVoucher: null, shipVoucher: 'FREESHIP30' };
 
-  const etaText = (o) => (o.id === 'express' ? 'Nhận hàng trong 2 giờ' : `Nhận hàng vào ${U.fmtDay(new Date(o.etaFrom))} - ${U.fmtDay(new Date(o.etaTo))}`);
+  const etaText = (o) => {
+    if (o.id === 'express') return 'Nhận hàng trong 2 giờ';
+    const d1 = U.fmtDay(new Date(o.etaFrom)), d2 = U.fmtDay(new Date(o.etaTo));
+    if (o.id === 'oms' && o.etaHours) return d1 === d2 ? `Dự kiến nhận ${d2} (trong ~${Math.ceil(o.etaHours)} giờ)` : `Dự kiến nhận ${d1} - ${d2} (~${Math.ceil(o.etaHours)} giờ)`;
+    return d1 === d2 ? `Nhận hàng vào ${d2}` : `Nhận hàng vào ${d1} - ${d2}`;
+  };
 
   /** Hộp chọn voucher của sàn. calc: kết quả SV.checkout.calc; opts.ship: có chọn mã freeship không */
   SV.voucherPicker = (calc, opts) => {
