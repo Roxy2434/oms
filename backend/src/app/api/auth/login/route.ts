@@ -8,6 +8,7 @@ import {readJsonLimited,requestLimiter,allowedAppOrigins} from '@/server/request
 import {isPublicDeployment} from '@/domain/demo-mode';
 import {passwordWork} from '@/server/password-work';
 import {publicLimit,durableLimit,privateKey} from '@/server/public-security';
+export async function GET(){return NextResponse.json({error:process.env.OMS_SITE_ROLE==='storefront'?'Không tìm thấy trang.':'Method Not Allowed'},{status:process.env.OMS_SITE_ROLE==='storefront'?404:405});}
 export async function POST(req:Request){
  if(process.env.OMS_SITE_ROLE==='storefront')return NextResponse.json({error:'Không tìm thấy trang.'},{status:404});
  const origin=req.headers.get('origin');

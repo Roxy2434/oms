@@ -91,6 +91,8 @@
       function draw() {
         const address = st.addressId ? SV.address.get(st.addressId) : null;
         calc = SV.checkout.calc({ lines, address, shipChoice: st.shipChoice, shopVoucher: st.shopVoucher, platformVoucher: st.platformVoucher, shipVoucher: st.shipVoucher });
+        const quoteLoading = !!address && calc.groups.some((g) => g.shop.oms && !g.ship && SV.oms.quoteState(address, g.lines).state !== 'error');
+        const quoteError = !!address && calc.groups.some((g) => g.shop.oms && !g.ship && SV.oms.quoteState(address, g.lines).state === 'error');
         const pay = SV.const.PAYMENTS.find((p) => p.id === st.payment);
         el.innerHTML = `<div class="container co-page">
           <section class="co-addr"><h3>${SV.icon('pin', 18)} Địa Chỉ Nhận Hàng</h3>
@@ -134,7 +136,7 @@
               ${calc.platformDiscount ? `<span>Tổng cộng Voucher giảm giá</span><span>-${U.money(calc.platformDiscount)}</span>` : ''}
               <span class="tl">Tổng thanh toán</span><span class="tot">${U.money(calc.total)}</span>
             </div></div>
-            <div class="co-place"><span class="muted">Nhấn "Đặt hàng" đồng nghĩa với việc bạn đồng ý tuân theo <a class="link" href="#/help">Điều khoản ShopVui</a></span><button type="button" class="btn btn-primary btn-lg" data-act="place">Đặt hàng</button></div>
+            <div class="co-place"><span class="muted">Nhấn "Đặt hàng" đồng nghĩa với việc bạn đồng ý tuân theo <a class="link" href="#/help">Điều khoản ShopVui</a></span><button type="button" class="btn btn-primary btn-lg" data-act="place" ${quoteLoading || quoteError ? 'disabled' : ''}>${quoteLoading ? 'Đang tính phí giao…' : 'Đặt hàng'}</button></div>
           </section>
         </div>`;
       }
@@ -243,6 +245,9 @@
         if (!address) {
           ui.toast('Vui lòng thêm địa chỉ nhận hàng', 'error');
           return chooseAddress();
+        }
+        if (calc && calc.groups.some((g) => g.shop.oms && !g.ship)) {
+          return ui.toast('Đang tính phí vận chuyển từ kho, vui lòng đợi giây lát', 'error');
         }
         if (placing) return;
         if (st.payment === 'bank' && SV.oms.realBankConsentRequired && !st.realBankAcknowledged) {

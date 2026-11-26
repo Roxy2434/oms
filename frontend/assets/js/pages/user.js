@@ -89,9 +89,23 @@
         return { note: '', btns: '' };
     }
   }
+  function itemActiveQty(o, i) {
+    if (!o.oms || !o.oms.activeItems) return i.qty;
+    const sku = (C.get(i.productId) || {}).omsSku;
+    return sku && sku in o.oms.activeItems ? o.oms.activeItems[sku] : i.qty;
+  }
+  function itemDeliveredQty(o, i) {
+    if (!o.oms || !o.oms.deliveredItems) return itemActiveQty(o, i);
+    const sku = (C.get(i.productId) || {}).omsSku;
+    return sku && sku in o.oms.deliveredItems ? o.oms.deliveredItems[sku] : itemActiveQty(o, i);
+  }
   function itemsHtml(o) {
     return o.items
-      .map((i) => `<div class="order-item">${ui.img(i.image, i.emoji)}<div class="info"><div class="nm">${U.esc(i.name)}</div>${i.variant ? `<div class="vr">Phân loại hàng: ${U.esc(i.variant)}</div>` : ''}<div>x${i.qty}</div></div><div class="pr">${i.originalPrice > i.price ? `<s>${U.money(i.originalPrice)}</s>` : ''}<span>${U.money(i.price)}</span></div></div>`)
+      .map((i) => {
+        const actQty = itemActiveQty(o, i);
+        const cancelledPart = o.status !== 'CANCELLED' && actQty < i.qty ? ` <span class="tag tag-gray">${actQty === 0 ? 'Đã hủy kiện' : `Đã hủy ${i.qty - actQty}/${i.qty}`}</span>` : '';
+        return `<div class="order-item">${ui.img(i.image, i.emoji)}<div class="info"><div class="nm">${U.esc(i.name)}${cancelledPart}</div>${i.variant ? `<div class="vr">Phân loại hàng: ${U.esc(i.variant)}</div>` : ''}<div>x${i.qty}</div></div><div class="pr">${i.originalPrice > i.price ? `<s>${U.money(i.originalPrice)}</s>` : ''}<span>${U.money(i.price)}</span></div></div>`;
+      })
       .join('');
   }
   function shopHd(o) {
@@ -104,7 +118,7 @@
     return `<div class="order">
       <div class="order-hd">${shopHd(o)}<div class="st">${['SHIPPING', 'COMPLETED'].includes(o.status) ? `<a class="teal" href="#/user/order/${o.id}">${SV.icon('truck', 16)} ${U.esc(last.text)}</a>` : ''}<b>${O().statusText(o).toUpperCase()}</b></div></div>
       <a class="order-items" href="#/user/order/${o.id}">${itemsHtml(o)}</a>
-      <div class="order-ft"><div class="tot">${SV.icon('shield', 16)} Thành tiền: <b>${U.money(o.amounts.total)}</b></div>
+      <div class="order-ft"><div class="tot">${SV.icon('shield', 16)} Thành tiền: <b>${U.money(o.oms && o.oms.refunded > 0 && o.status !== 'CANCELLED' ? Math.max(0, o.amounts.total - o.oms.refunded) : o.amounts.total)}</b>${o.oms && o.oms.refunded > 0 && o.status !== 'CANCELLED' ? ` <span class="muted small">(đã hoàn ${U.money(o.oms.refunded)})</span>` : ''}</div>
         <div class="acts"><span class="note">${acts.note}</span>${acts.btns}</div></div>
     </div>`;
   }
@@ -176,16 +190,17 @@
       // Chọn món + số lượng cần trả, lý do, mô tả và tối đa 3 ảnh (không bắt buộc) làm bằng chứng cho kho.
       const photos = [];
       let pending = 0;
-      const one = o.items.length === 1;
+      const returnable = o.items.map((it, i) => ({ it, i, max: itemDeliveredQty(o, it) }));
+      const onlyIdx = returnable.filter((x) => x.max > 0).length === 1 ? returnable.find((x) => x.max > 0).i : -1;
       const req = await ui.modal({
         title: 'Yêu Cầu Trả Hàng/Hoàn Tiền', width: 600, okText: 'Gửi Yêu Cầu',
         body: `<p class="notice">Áp dụng trong vòng ${O().returnDays(o)} ngày kể từ khi nhận hàng.</p>
           <h4 class="rt-h">Sản phẩm muốn trả</h4>
-          ${o.items.map((it, i) => `<label class="rt-item">
-            <input type="checkbox" name="pick" value="${i}"${one ? ' checked' : ''}>
+          ${returnable.map(({ it, i, max }) => `<label class="rt-item">
+            <input type="checkbox" name="pick" value="${i}"${onlyIdx === i ? ' checked' : ''}${max <= 0 ? ' disabled' : ''}>
             ${ui.img(it.image, it.emoji)}
-            <span class="rt-name">${U.esc(it.name)}${it.variant ? `<span class="muted">Phân loại: ${U.esc(it.variant)}</span>` : ''}</span>
-            <span class="rt-qty">SL <input class="input" type="number" name="q${i}" min="1" max="${it.qty}" value="${it.qty}"${one ? '' : ' disabled'} aria-label="Số lượng trả ${U.esc(it.name)}"> / ${it.qty}</span>
+            <span class="rt-name">${U.esc(it.name)}${max <= 0 ? ' <span class="muted">(Đã hủy kiện — đã hoàn tiền)</span>' : ''}${it.variant ? `<span class="muted">Phân loại: ${U.esc(it.variant)}</span>` : ''}</span>
+            <span class="rt-qty">${max > 0 ? `SL <input class="input" type="number" name="q${i}" min="1" max="${max}" value="${max}"${onlyIdx === i ? '' : ' disabled'} aria-label="Số lượng trả ${U.esc(it.name)}"> / ${max}` : '—'}</span>
           </label>`).join('')}
           <h4 class="rt-h">Lý do</h4>
           ${RETURN_REASONS.map((r) => `<label class="radio-row"><input type="radio" name="reason" value="${U.esc(r)}"> ${U.esc(r)}</label>`).join('')}
@@ -229,8 +244,8 @@
         onOk(m) {
           const msg = m.querySelector('.msg');
           const items = [...m.querySelectorAll('[name=pick]:checked')].map((c) => {
-            const it = o.items[+c.value];
-            return { index: +c.value, qty: Math.max(1, Math.min(it.qty, Math.floor(+m.querySelector(`[name=q${c.value}]`).value) || 0)) };
+            const max = itemDeliveredQty(o, o.items[+c.value]);
+            return { index: +c.value, qty: Math.max(1, Math.min(max, Math.floor(+m.querySelector(`[name=q${c.value}]`).value) || 0)) };
           });
           const c = m.querySelector('[name=reason]:checked');
           if (!items.length) msg.textContent = 'Vui lòng chọn sản phẩm muốn trả';
@@ -372,7 +387,8 @@
           ${o.amounts.shipDiscount ? `<div class="k">Giảm giá phí vận chuyển</div><div>-${U.money(o.amounts.shipDiscount)}</div>` : ''}
           ${o.amounts.shopDiscount ? `<div class="k">Voucher từ Shop</div><div>-${U.money(o.amounts.shopDiscount)}</div>` : ''}
           ${o.amounts.platformDiscount ? `<div class="k">Voucher từ ShopVui</div><div>-${U.money(o.amounts.platformDiscount)}</div>` : ''}
-          <div class="k">Thành tiền</div><div class="big">${U.money(o.amounts.total)}</div>
+          <div class="k">Thành tiền</div><div class="big">${U.money(o.oms && o.oms.refunded > 0 && o.status !== 'CANCELLED' ? Math.max(0, o.amounts.total - o.oms.refunded) : o.amounts.total)}</div>
+          ${o.oms && o.oms.refunded > 0 ? `<div class="k">Đã hoàn tiền</div><div class="teal">-${U.money(o.oms.refunded)}</div>` : ''}
           <div class="k">Phương thức Thanh toán</div><div>${o.payment.label}${o.payment.paid ? ' · <span class="teal">Đã thanh toán</span>' : ''}</div>
         </div></div>`;
       main.addEventListener('click', (e) => {

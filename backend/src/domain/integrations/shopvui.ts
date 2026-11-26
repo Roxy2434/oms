@@ -185,19 +185,31 @@ const returnStage=(st:string[])=>st.every(x=>x==='TU_CHOI')?'rejected':st.some(x
 /** refs: (orderId, token) pairs; refs whose token does not match are ignored, so nobody reads orders they did not place. */
 export async function statuses(refs:{orderId:string;token:string}[]){
  const list=[...new Set(refs.slice(0,100).filter(r=>owns(r.orderId,r.token)).map(r=>r.orderId))];
- const all=await db.order.findMany({where:{channel:'SHOPVUI',id:{in:list}},select:{id:true,status:true,reason:true,confirmedAt:true,paymentMethod:true,shopPurchase:{select:{payment:true}},shippingFee:true,lines:{select:{id:true,quantity:true,priceSnapshot:true}},shipments:{select:{status:true,trackingCode:true,deliveredAt:true,handedOverAt:true,lines:{select:{orderLineId:true,quantity:true}}}},transactions:true,returns:{select:{id:true,kind:true,code:true,trackingCode:true,status:true}}}});
+ const all=await db.order.findMany({where:{channel:'SHOPVUI',id:{in:list}},select:{id:true,status:true,reason:true,confirmedAt:true,paymentMethod:true,shopPurchase:{select:{payment:true}},shippingFee:true,lines:{select:{id:true,skuId:true,quantity:true,priceSnapshot:true}},shipments:{select:{status:true,trackingCode:true,deliveredAt:true,handedOverAt:true,lines:{select:{orderLineId:true,quantity:true}}}},transactions:true,returns:{select:{id:true,kind:true,code:true,trackingCode:true,status:true}}}});
  const orders=all.map(o=>({...o,returns:o.returns.filter(r=>r.kind==='KHACH_TRA'),senderReturns:o.returns.filter(r=>r.kind==='CHUYEN_HOAN')}));
- return {orders:orders.map(o=>({...storefrontStatus(o),...payment(o),
-  // Every successful refund of this order (cancel, return, sender return), net of compensations: ShopVui credits it to the buyer's ShopVuiPay wallet.
-  refunded:causeAmount(o.transactions,'HOAN',root=>root.kind==='HOAN'),
-  // Milestone times, so the storefront can record steps it skipped between two syncs at the time they really happened.
-  confirmedAt:o.confirmedAt?.toISOString()??null,
-  handedOverAt:o.shipments.map(s=>s.handedOverAt?.getTime()??0).filter(Boolean).sort((a,b)=>a-b).map(t=>new Date(t).toISOString())[0]??null,
-  // Parcels the carrier brought back: what OMS refunded for them (after receiving them) and whether that is still open.
-  rtsRefunded:causeAmount(o.transactions,'HOAN',t=>t.reason==='HOAN_RMA'&&o.senderReturns.some(r=>r.id===t.returnId)),
-  rtsOpen:o.senderReturns.some(r=>!['DA_DONG','TU_CHOI'].includes(r.status)),
-  // Return progress for the storefront: RMA codes + return waybills, stage, and what was actually refunded.
-  ...(o.returns.length?{rma:{stage:returnStage(o.returns.map(r=>r.status)),cases:o.returns.map(r=>({code:r.code,trackingCode:r.trackingCode,status:r.status})),refunded:causeAmount(o.transactions,'HOAN',t=>t.reason==='HOAN_RMA'&&o.returns.some(r=>r.id===t.returnId))}}:{})})),
+ return {orders:orders.map(o=>{
+  const activeItems:Record<string,number>={},deliveredItems:Record<string,number>={};
+  for(const l of o.lines){activeItems[l.skuId]=0;deliveredItems[l.skuId]=0;}
+  for(const s of o.shipments){
+   if(s.status==='HUY')continue;
+   for(const sl of s.lines){
+    const ol=o.lines.find(x=>x.id===sl.orderLineId);if(!ol)continue;
+    activeItems[ol.skuId]=(activeItems[ol.skuId]??0)+sl.quantity;
+    if(s.status==='DA_GIAO')deliveredItems[ol.skuId]=(deliveredItems[ol.skuId]??0)+sl.quantity;
+   }
+  }
+  return {...storefrontStatus(o),...payment(o),activeItems,deliveredItems,
+   // Every successful refund of this order (cancel, return, sender return), net of compensations: ShopVui credits it to the buyer's ShopVuiPay wallet.
+   refunded:causeAmount(o.transactions,'HOAN',root=>root.kind==='HOAN'),
+   // Milestone times, so the storefront can record steps it skipped between two syncs at the time they really happened.
+   confirmedAt:o.confirmedAt?.toISOString()??null,
+   handedOverAt:o.shipments.map(s=>s.handedOverAt?.getTime()??0).filter(Boolean).sort((a,b)=>a-b).map(t=>new Date(t).toISOString())[0]??null,
+   // Parcels the carrier brought back: what OMS refunded for them (after receiving them) and whether that is still open.
+   rtsRefunded:causeAmount(o.transactions,'HOAN',t=>t.reason==='HOAN_RMA'&&o.senderReturns.some(r=>r.id===t.returnId)),
+   rtsOpen:o.senderReturns.some(r=>!['DA_DONG','TU_CHOI'].includes(r.status)),
+   // Return progress for the storefront: RMA codes + return waybills, stage, and what was actually refunded.
+   ...(o.returns.length?{rma:{stage:returnStage(o.returns.map(r=>r.status)),cases:o.returns.map(r=>({code:r.code,trackingCode:r.trackingCode,status:r.status})),refunded:causeAmount(o.transactions,'HOAN',t=>t.reason==='HOAN_RMA'&&o.returns.some(r=>r.id===t.returnId))}}:{})};
+ }),
   // Orders the caller proved it owns (valid token) but OMS no longer has, e.g. after the OMS database was rebuilt: the storefront drops them.
   missing:list.filter(id=>!all.some(o=>o.id===id))};
 }

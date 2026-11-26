@@ -626,8 +626,14 @@
 
     /** Áp trạng thái OMS gửi về (xem core/oms.js), rồi cộng vào ví phần tiền OMS mới hoàn. Trả về true nếu có thay đổi. */
     applyOms(s) {
-      const changed = this.applyOmsState(s);
+      let changed = this.applyOmsState(s);
       const o = db().orders.find((x) => x.oms && x.code === s.orderId);
+      if (o && s.activeItems) {
+        const prev = JSON.stringify([o.oms.activeItems, o.oms.deliveredItems]);
+        o.oms.activeItems = s.activeItems;
+        o.oms.deliveredItems = s.deliveredItems || {};
+        if (JSON.stringify([o.oms.activeItems, o.oms.deliveredItems]) !== prev) changed = true;
+      }
       if (!o || typeof s.refunded !== 'number') return changed;
       o.oms.refunded = s.refunded;
       return SV.wallet.refundTo(o, s.refunded, 'Hoàn tiền từ shop EZMART') > 0 || changed;

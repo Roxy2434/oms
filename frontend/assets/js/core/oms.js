@@ -118,7 +118,7 @@
     // Theo dõi tới khi xong hẳn: đơn đang trả hàng, đơn còn kiện chuyển hoàn chưa xử lý tiền, và đơn bị hủy do chuyển hoàn (để sửa nếu thực ra chỉ một phần).
     // Đơn đã trả tiền rồi bị hủy: theo dõi tới khi OMS hoàn đủ (ví được cộng ở applyOms).
     const owed = (o) => o.status === 'CANCELLED' && o.payment.paid && (o.oms.refunded || 0) < (o.oms.paidAmount || o.amounts.total);
-    const open = db().orders.filter((o) => o.oms && (o.status === 'RETURN' ? !(o.oms.rma && ['closed', 'rejected'].includes(o.oms.rma.stage)) : !['COMPLETED', 'CANCELLED'].includes(o.status) || o.oms.rtsOpen || owed(o) || (o.status === 'CANCELLED' && o.oms.stage === 'returned' && o.oms.rtsOpen !== false)));
+    const open = db().orders.filter((o) => o.oms && (o.status === 'RETURN' ? !(o.oms.rma && ['closed', 'rejected'].includes(o.oms.rma.stage)) : !['COMPLETED', 'CANCELLED'].includes(o.status) || o.oms.rtsOpen || owed(o) || (o.status === 'COMPLETED' && !o.oms.deliveredItems) || (o.status === 'CANCELLED' && o.oms.stage === 'returned' && o.oms.rtsOpen !== false)));
     if (!open.length) return;
     syncing = true;
     try {
