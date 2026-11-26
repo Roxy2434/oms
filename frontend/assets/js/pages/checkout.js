@@ -123,7 +123,8 @@
             <span class="rr">${calc.shipVoucher && calc.shipDiscount ? `<span class="vchip teal">Freeship -${U.money(calc.shipDiscount)}</span>` : ''}${calc.platformVoucher && calc.platformDiscount ? `<span class="vchip">-${U.money(calc.platformDiscount)}</span>` : ''}<button type="button" class="link" data-act="voucher">Chọn Voucher</button></span></section>
 
           <section class="co-box co-pay">
-            <div class="co-pay-hd"><span class="t">Phương thức thanh toán</span><div class="co-pay-methods">${SV.const.PAYMENTS.map((p) => `<button type="button" class="pm ${st.payment === p.id ? 'on' : ''}" data-pay="${p.id}">${p.label}</button>`).join('')}</div></div>
+            <div class="co-pay-hd"><span class="t">Phương thức thanh toán</span><div class="co-pay-methods">${SV.const.PAYMENTS.filter(p => p.id !== 'bank' || SV.oms.bankAvailable).map((p) => `<button type="button" class="pm ${st.payment === p.id ? 'on' : ''}" data-pay="${p.id}">${p.label}</button>`).join('')}</div></div>
+            ${st.payment === 'bank' && SV.oms.realBankConsentRequired ? `<label class="check"><input type="checkbox" data-bank-consent ${st.realBankAcknowledged ? 'checked' : ''} aria-describedby="bank-real-warning"> Xác nhận thanh toán chuyển khoản ngân hàng qua SePay.</label><p id="bank-real-warning">Giao dịch chuyển khoản ngân hàng được hệ thống tự động đối soát theo mã đơn hàng.${SV.oms.refundContact ? ` Hỗ trợ tra soát hoàn tiền: ${U.esc(SV.oms.refundContact)}.` : ''}</p><p role="alert" data-bank-error></p>` : ''}
             <div class="co-pay-desc">${SV.icon(st.payment === 'cod' ? 'truck' : st.payment === 'wallet' ? 'wallet' : 'card', 18)} ${pay.desc}${st.payment === 'wallet' ? ` Số dư ví: <b>${U.money(SV.wallet.balance())}</b>.${SV.wallet.balance() < calc.total ? ` <span class="co-wallet-low">Không đủ để thanh toán ${U.money(calc.total)}.</span> Vui lòng chọn cách thanh toán khác.` : ''}` : ''}</div>
             <div class="co-summary"><div class="grid2">
               <span>Tổng tiền hàng</span><span>${U.money(calc.subtotal)}</span>
@@ -175,12 +176,14 @@
       }
 
       el.addEventListener('input', (e) => {
+        if (e.target.matches('[data-bank-consent]')) st.realBankAcknowledged = e.target.checked;
         if (e.target.dataset.note) st.notes[e.target.dataset.note] = e.target.value;
       });
       el.addEventListener('click', async (e) => {
         const pm = e.target.closest('[data-pay]');
         if (pm) {
           st.payment = pm.dataset.pay;
+          st.realBankAcknowledged = false;
           return draw();
         }
         const cs = e.target.closest('[data-chat-shop-btn]');
@@ -242,33 +245,24 @@
           return chooseAddress();
         }
         if (placing) return;
+        if (st.payment === 'bank' && SV.oms.realBankConsentRequired && !st.realBankAcknowledged) {
+          el.querySelector('[data-bank-error]').textContent = 'Cần đọc cảnh báo và xác nhận chuyển tiền thật trước khi đặt đơn.';
+          el.querySelector('[data-bank-consent]').focus(); return;
+        }
         placing = true;
         const btn = el.querySelector('[data-act=place]');
         if (btn) btn.disabled = true;
         // st.ids giữ mã đơn giữa các lần bấm lại để OMS không tạo trùng.
         st.ids = st.ids || {};
-        const r = await SV.orders.place({ lines, address, notes: st.notes, payment: st.payment, ids: st.ids }, calc).finally(() => {
+        const r = await SV.orders.place({ lines, address, notes: st.notes, payment: st.payment, realBankAcknowledged: !!st.realBankAcknowledged, ids: st.ids }, calc).finally(() => {
           placing = false;
           if (btn) btn.disabled = false;
         });
         if (!r.ok) return ui.toast(r.error, 'error');
         SV.state.platformVoucher = null;
         if (st.payment === 'bank') {
-          // Đơn shop OMS khi OMS bật SePay: quét QR thật, ngân hàng xác nhận. Các đơn còn lại: chuyển khoản mô phỏng như cũ.
-          const real = r.orders.filter(SV.oms.hasQr), sim = r.orders.filter((o) => !SV.oms.hasQr(o));
-          let paid = false;
-          if (sim.length) {
-            paid = await ui.modal({
-              title: 'Thanh toán chuyển khoản (mô phỏng)', width: 480, okText: 'Tôi đã thanh toán', cancelText: 'Thanh toán sau',
-              body: `<div class="pay-sim"><div class="pay-amt">${U.money(sim.reduce((s, o) => s + o.amounts.total, 0))}</div><p>Đơn hàng: ${sim.map((o) => `<b>${o.code}</b>`).join(', ')}</p><p class="note">Đây là bản demo nên không có tài khoản ngân hàng thật. Bấm <b>"Tôi đã thanh toán"</b> để mô phỏng giao dịch thành công; nếu chọn "Thanh toán sau", đơn sẽ nằm ở mục <b>Chờ thanh toán</b>.</p></div>`,
-            });
-            if (paid) await Promise.all(sim.map((o) => SV.orders.pay(o.id)));
-          }
-          // Có đơn chuyển khoản thật: sang trang thanh toán QR của đơn đó (trang tự báo thành công khi tiền về).
-          if (real.length) return SV.go('/payment/' + real[0].id);
-          if (paid) return SV.go('/order-success/' + sim.map((o) => o.id).join(','));
-          ui.toast('Đơn hàng đang chờ thanh toán', 'info');
-          return SV.go('/user/purchase?type=unpaid');
+          // No self-attested bank payments: only SePay can confirm that money arrived.
+          return SV.go('/payment/' + r.orders[0].id);
         }
         // COD / ví: sang trang Đặt hàng thành công (có pháo bông chúc mừng).
         SV.go('/order-success/' + r.orders.map((o) => o.id).join(','));
@@ -368,6 +362,7 @@
       el.innerHTML = `<div class="container pay-page"><section class="pay-card" aria-labelledby="pay-title">
         <header class="pay-head"><div><h1 id="pay-title">Thanh toán đơn hàng</h1><p class="muted">Mã đơn <b>${U.esc(o.code)}</b> · ${U.esc(o.shopName)}</p></div>
           <div class="pay-head-amt"><span class="muted">Số tiền cần thanh toán</span><b>${U.money(q.amount)}</b>${q.payBy ? `<span class="pay-deadline" data-deadline>Thanh toán trước ${U.fmtDate(q.payBy, true)}</span>` : ''}</div></header>
+        <p class="notice" role="note" style="overflow-wrap:anywhere">Quét mã VietQR hoặc chuyển khoản đúng số tiền và nội dung bên dưới để hệ thống tự động xác nhận ngay.${SV.oms.refundContact ? ' Hỗ trợ đối soát thanh toán: ' + U.esc(SV.oms.refundContact) + '.' : ''}</p>
         <div class="pay-body">
           <div class="pay-qr">
             <div class="pay-qr-frame"><img src="${U.esc(q.url)}" alt="Mã VietQR chuyển khoản đơn ${U.esc(o.code)}" width="240" height="240"></div>
@@ -386,7 +381,7 @@
           </div>
         </div>
         <div class="pay-status" role="status"><span class="pay-spinner" aria-hidden="true"></span><div><b>Đang chờ thanh toán</b><small>Trang tự cập nhật ngay khi ngân hàng báo đã nhận tiền.</small></div></div>
-        <footer class="pay-actions">${q.demo ? '<button type="button" class="btn pay-demo" data-demo-pay title="Chỉ dùng khi trình diễn: ghi nhận đã thanh toán mà không chuyển tiền thật">Đã thanh toán (demo)</button>' : ''}<a class="btn" href="#/user/purchase?type=unpaid">Thanh toán sau</a><button type="button" class="btn btn-primary" data-check>Kiểm tra thanh toán</button></footer>
+        <footer class="pay-actions"><a class="btn" href="#/user/purchase?type=unpaid">Thanh toán sau</a><button type="button" class="btn btn-primary" data-check>Kiểm tra thanh toán</button></footer>
       </section></div>`;
       el.addEventListener('click', async (e) => {
         const c = e.target.closest('[data-copy]');
@@ -397,19 +392,6 @@
           } catch (err) {
             ui.toast(c.dataset.copy, 'info', 3000);
           }
-        }
-        // Nút demo (OMS bật SHOPVUI_DEMO_PAY): OMS ghi khoản thu DEMO, rồi trang chuyển sang thanh toán thành công như khi tiền thật về.
-        const demo = e.target.closest('[data-demo-pay]');
-        if (demo) {
-          demo.disabled = true;
-          try {
-            await SV.oms.pay(o);
-            await SV.oms.checkNow(o);
-          } catch (err) {
-            demo.disabled = false;
-            ui.toast(err.message, 'error');
-          }
-          return;
         }
         const chk = e.target.closest('[data-check]');
         if (chk) {

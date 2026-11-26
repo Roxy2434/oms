@@ -14,7 +14,7 @@
     let res;
     try {
       res = await fetch(cfg.base + '/' + action + (query ? '?' + query : ''), {
-        method, headers: Object.assign({ 'X-ShopVui-Key': cfg.key }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined,
+        method, credentials: 'include', headers: Object.assign({ 'X-ShopVui-Key': cfg.key }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined,
       });
     } catch (e) {
       throw new Error('Không kết nối được hệ thống quản lý đơn hàng của shop EZMART. Vui lòng thử lại sau.');
@@ -26,7 +26,7 @@
 
   // Vẽ lại trang đang xem, trừ trang Thanh toán (đang nhập dở; trang đó tự vẽ lại khi có báo phí).
   // Form pages show no OMS data; re-rendering them would wipe what the user is typing.
-  const rerender = () => !/^#\/(checkout|login|register)/.test(location.hash) && SV.router && SV.router.render({ keepScroll: true });
+  const rerender = () => !/^#\/(checkout|login|register|user\/account)/.test(location.hash) && SV.router && SV.router.render({ keepScroll: true });
   const isOmsShop = (shop) => !!(shop && shop.oms);
   const items = (lines) => lines.map((l) => ({ sku: (l.product || C.get(l.productId)).omsSku, qty: l.qty }));
   const addr = (a) => ({ province: a.province, ward: a.ward || '', detail: a.detail });
@@ -34,12 +34,14 @@
   /* ---------- Giá & tồn thật từ OMS ---------- */
   async function refreshCatalog() {
     try {
-      const { products } = await call('GET', 'catalog');
-      let changed = false;
+      const { products, demoMode, bankAvailable, realBankConsentRequired, refundContact } = await call('GET', 'catalog');
+      let changed = SV.oms.demoMode !== !!demoMode || SV.oms.bankAvailable !== !!bankAvailable;
+      SV.oms.demoMode = !!demoMode; SV.oms.bankAvailable = !!bankAvailable;
+      SV.oms.realBankConsentRequired = !!realBankConsentRequired; SV.oms.refundContact = refundContact || '';
       products.forEach((x) => {
         const p = window.SV_DATA.products.find((q) => q.omsSku === x.sku);
         if (p && (p.price !== x.price || p.stock !== x.available)) {
-          Object.assign(p, { price: x.price, originalPrice: x.price, stock: x.available });
+          Object.assign(p, { price: x.price, originalPrice: Math.max(x.price, p.demoOriginalPrice || x.price), stock: x.available });
           changed = true;
         }
       });
@@ -94,7 +96,7 @@
     if (!value && create) { value = crypto.randomUUID() + crypto.randomUUID(); localStorage.setItem(key, value); }
     return value || undefined;
   }
-  const placeBody = (o) => ({ orderId: o.code, name: o.address.name, phone: o.address.phone, address: addr(o.address), items: items(o.items), payment: o.payment.method, token: o.oms && o.oms.token, recoveryKey: recoveryKey(o.code, false) });
+  const placeBody = (o) => ({ orderId: o.code, name: o.address.name, phone: o.address.phone, address: addr(o.address), items: items(o.items), payment: o.payment.method, realBankAcknowledged: !!o.payment.realBankAcknowledged, token: o.oms && o.oms.token, recoveryKey: recoveryKey(o.code, false) });
   /** Missing tokens require the secret saved by THIS browser when placing; old secretless orders need staff assistance. */
   async function recoverTokens(list) {
     let changed = false;
@@ -135,6 +137,8 @@
   }
 
   SV.oms = {
+    demoMode: false,
+    bankAvailable: false,
     isOmsShop,
     isOrder: (o) => !!(o && o.oms),
     shippingOption,
@@ -144,7 +148,10 @@
     syncStatuses,
     place: (o) => { recoveryKey(o.code, true); return call('POST', 'orders', placeBody(o)); },
     pay: (o) => call('POST', 'pay', ref(o)),
-    cancel: (o, reason) => call('POST', 'cancel', Object.assign(ref(o), { reason })),
+    cancel: (o, reason) => call('POST', 'cancel', Object.assign(ref(o), { reason })).then((r) => {
+      if (r.accountState && SV.account) { SV.account.hydrate(r.accountState); ['orders', 'wallet', 'auth'].forEach((e) => SV.emit(e)); }
+      return r;
+    }),
     requestReturn: (o, reason, extra) => call('POST', 'return', Object.assign(ref(o), { reason }, extra || {})),
     hasQr: (o) => !!(o && o.oms && o.oms.qr),
     checkNow,

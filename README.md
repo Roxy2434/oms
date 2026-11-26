@@ -7,6 +7,19 @@
 
 Kèm **ShopVui**, sàn bán hàng mô phỏng. Đơn khách đặt ở shop *EZMART* tự vào EZMART với kênh ShopVui.
 
+## Triển khai web công khai: COD/ví giả, SePay thật
+
+Đã có profile VPS riêng trong `deploy/`, gồm HTTPS Caddy, đăng ký Turnstile, quota DB, backend non-root, backup/restore và đối soát ngân hàng tách riêng. **Không dùng Compose demo local bên dưới để mở Internet.** Hướng dẫn cấu hình và chạy image đã build: [docs/public-deploy.md](docs/public-deploy.md).
+
+Bản local hiện tại vẫn khóa SePay. Trên VPS, chỉ bật ngân hàng bằng `OMS_DEMO_REAL_BANK=1` sau khi điền cấu hình thật; COD/ví vẫn giả và không giao hàng thật. Chưa có VPS/domain đích nên chưa có URL Internet.
+
+## Bộ demo hiện hành (26/11/2026)
+
+- Giá 10 sản phẩm EZMART đã giảm một nửa, ảnh chụp cùng loại/màu lưu local kèm nguồn/giấy phép.
+- Có **17 ca DOM/RMA/báo cáo/ShopVui** cho mỗi lượt. Trên bản local, chạy `cd backend` rồi `npm run demo:refresh` để backup và chuẩn bị lượt mới; link/tài khoản hiện hành ở `backend/storage/demo/LUOT-HIEN-TAI.md`. Giữ lịch sử, không xóa tài khoản/đơn ngoài demo.
+- Mặc định **OMS_DEMO_MODE=1**: ví/COD mô phỏng hoạt động, SePay tiền thật bị khóa. Không chuyển tiền thật để thử.
+- Hướng dẫn: [docs/demo-repeatable.md](docs/demo-repeatable.md). Đánh giá khả năng deploy nhiều hướng, các điểm chưa đạt: [docs/deployment-readiness-20261126.md](docs/deployment-readiness-20261126.md).
+
 ## Cấu trúc thư mục
 
 ```
@@ -36,7 +49,7 @@ Lần đầu mất vài phút để tải và build. Hệ thống tự tạo b�
 | Ứng dụng | Địa chỉ | Tài khoản mẫu |
 |---|---|---|
 | EZMART (nhân viên) | http://127.0.0.1:3001 | `quanly` / `OmsDemo@2026` (quản lý) · `nhanvien.an`, `nhanvien.binh` (nhân viên, cùng mật khẩu) |
-| ShopVui (khách) | http://127.0.0.1:8000 | `demo` / `Demo1234` |
+| ShopVui (khách) | http://127.0.0.1:8000 | Bấm **Đăng Ký** để tạo tài khoản trên máy chủ |
 
 Giữ cửa sổ terminal mở trong lúc dùng. Bấm `Ctrl + C` để dừng; dữ liệu vẫn được giữ cho lần chạy sau.
 
@@ -44,9 +57,9 @@ Giữ cửa sổ terminal mở trong lúc dùng. Bấm `Ctrl + C` để dừng; 
 
 1. **Tắt bản cũ.** Nếu bản cũ đang chạy trong terminal thì bấm `Ctrl + C`. Nếu bản cũ chạy bằng Docker, mở terminal trong thư mục bản cũ rồi chạy:
    ```bash
-   docker compose down -v
+   docker compose down
    ```
-   Lệnh này xoá dữ liệu của bản cũ để bản mới nạp lại dữ liệu mẫu từ đầu.
+   Không thêm `-v` khi nâng cấp vì sẽ xóa volume dữ liệu. Sao lưu trước; bản mới áp migration và giữ dữ liệu hiện có.
 2. **Giải nén bản mới ra một thư mục mới.** Không chép đè lên thư mục bản cũ, vì file thừa của bản cũ có thể làm build lỗi.
 3. Trong thư mục bản mới, chạy `docker compose up --build` như mục **Chạy** ở trên. Phải có `--build` để Docker dựng lại bằng code mới.
 4. Mở trình duyệt và bấm **Ctrl + F5** ở cả hai trang (3001 và 8000) để trình duyệt không dùng file cũ đã lưu.
@@ -79,7 +92,9 @@ Muốn đổi mật khẩu mặc định: sao chép `.env.example` thành `.env`
 ## Giới hạn
 
 - Chọn kho theo **vùng** (Hà Nội, Đà Nẵng, TP.HCM) với bảng cước và thời gian mẫu; không tính khoảng cách địa lý thật.
-- Hãng vận chuyển, Shopee/TikTok và hoàn tiền là **mô phỏng**; thanh toán SePay tắt trong bản này.
+- ShopVui lưu tài khoản/ví/đơn EZMART trên máy chủ. Mỗi tài khoản mới nhận **6.000.000đ mô phỏng một lần**, không rút/đổi thành tiền thật. Chỉ EZMART nhận đơn; các shop mẫu khác chỉ để xem.
+- Bỏ thanh toán ngân hàng demo. SePay chỉ có thể nhận tiền thật khi được duyệt riêng, đặt `OMS_DEMO_MODE=0` và cấu hình `SEPAY_API_TOKEN`/`SEPAY_ACCOUNT` trong `.env`; không cấu hình thì chuyển khoản bị từ chối, vẫn dùng được ví/COD. Không có nút tự xác nhận đã trả tiền.
+- SePay xác nhận tiền vào, **không tự chuyển tiền hoàn**. Đơn ngân hàng thật cần nhân viên hoàn thật và ghi nhận riêng; không cộng vào ví mô phỏng. Hãng vận chuyển, Shopee/TikTok vẫn mô phỏng. Chi tiết: `docs/shopvui-server-accounts.md`.
 - Chỉ chạy nội bộ trên máy (127.0.0.1). Mật khẩu mặc định chỉ dùng cho demo.
 
 ## Tài liệu

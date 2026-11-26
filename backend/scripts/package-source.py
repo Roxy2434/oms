@@ -10,21 +10,21 @@ import argparse, hashlib, json, zipfile
 ROOT=Path(__file__).resolve().parents[2]  # repo root: backend/ frontend/ docs/ + release files
 APP=ROOT/'backend'
 # Root of the ZIP: files written for end users, kept at the repo root.
-RELEASE_FILES={'README.md','docker-compose.yml','.env.example','.gitignore'}
+RELEASE_FILES={'README.md','docker-compose.yml','.env.example','.gitignore','.dockerignore'}
 # backend/: everything needed to build, run, develop and test the Next.js app.
-APP_FILES={'package.json','package-lock.json','tsconfig.json','next.config.ts','prisma.config.ts','eslint.config.mjs','playwright.config.ts','.nvmrc','.env.example','Dockerfile','.dockerignore','compose.yaml'}
+APP_FILES={'package.json','package-lock.json','tsconfig.json','next.config.ts','prisma.config.ts','eslint.config.mjs','playwright.config.ts','vitest.config.ts','.nvmrc','.env.example','Dockerfile','.dockerignore','compose.yaml'}
 APP_DIRS={'src','prisma','scripts','tests','docker'}
 # docs/: what a reader of the project needs; internal audit logs and working notes stay in the repo.
-DOCS={'DESIGN.md','requirements.md','data-model.md','dom-rma.bpmn','checkout-flow.md','financial-cases.md','demo.md','HANDOVER.md','test-report.md','final-acceptance.md','ke-hoach-xay-dung-oms.docx'}
+DOCS={'DESIGN.md','requirements.md','data-model.md','dom-rma.bpmn','checkout-flow.md','financial-cases.md','demo.md','HANDOVER.md','test-report.md','final-acceptance.md','ke-hoach-xay-dung-oms.docx','shopvui-server-accounts.md','demo-repeatable.md','deployment-readiness-20261125.md','deployment-readiness-20261126.md','public-deploy.md','classroom-playbook.md'}
 SUFFIXES={'.ts','.tsx','.js','.mjs','.css','.html','.json','.sql','.prisma','.toml','.py','.md','.bpmn','.docx','.webp','.png','.jpg','.jpeg','.svg','.woff','.woff2'}
-BLOCK_PARTS={'node_modules','.next','.git','generated','__pycache__','storage','artifacts','test-results','playwright-report'}
+BLOCK_PARTS={'secrets','backups','exports','node_modules','.next','.git','generated','__pycache__','storage','artifacts','test-results','playwright-report'}
 BLOCK_SUFFIXES={'.dump','.zip','.log','.pyc','.tsbuildinfo','.pem','.key','.p12','.mp4','.webm'}
 
 def ok(p:Path)->bool:
     rel=p.relative_to(ROOT)
     if not p.is_file() or p.is_symlink() or any(x in BLOCK_PARTS for x in rel.parts):return False
     if p.suffix.lower() in BLOCK_SUFFIXES:return False
-    if rel.parts[:2]==('backend','scripts') and p.name.startswith(('demo-','record-')):return False
+    if rel.parts[:2]==('backend','scripts') and p.name.startswith(('demo-','record-')) and p.name!='demo-status.ts':return False
     return p.resolve().is_relative_to(ROOT.resolve())
 
 def files(root=ROOT):
@@ -39,19 +39,22 @@ def files(root=ROOT):
         for p in sorted((root/d).rglob('*')):
             if ok(p) and p.suffix.lower() in SUFFIXES and not p.name.startswith('.env'):
                 yield p,p.relative_to(root).as_posix()
+    for name in ('Caddyfile','edge.Dockerfile','ops.Dockerfile','compose.yaml','prebuilt.yaml','db-init.sh','backup.sh','monitor.sh','restore-check.sh','rescue.sh','init-env.py','.env.example'):
+        p=root/'deploy'/name
+        if p.is_file() and ok(p):yield p,'deploy/'+name
     for name in sorted(DOCS):
         p=root/'docs'/name
         if p.is_file():yield p,'docs/'+name
 
 def private_values():
-    env=APP/'.env'
-    if not env.exists():return []
-    sensitive={'DB_PASSWORD','SESSION_SECRET','BOOTSTRAP_PASSWORD','SEPAY_API_TOKEN','SEPAY_ACCOUNT'}
+    sensitive={'DB_PASSWORD','DB_ADMIN_PASSWORD','APP_DB_PASSWORD','SESSION_SECRET','BOOTSTRAP_PASSWORD','SEPAY_API_TOKEN','SEPAY_ACCOUNT','DEMO_BUYER_PASSWORD','TURNSTILE_SECRET_KEY','STAFF_EDGE_PASSWORD','STAFF_EDGE_HASH','OPS_ALERT_URL'}
     result=[]
-    for line in env.read_text(encoding='utf-8-sig').splitlines():
-        if '=' not in line or line.lstrip().startswith('#'):continue
-        key,value=line.split('=',1);value=value.strip().strip('\"\'')
-        if key.strip() in sensitive and len(value)>=8:result.append((key.strip(),value.encode()))
+    for env in (APP/'.env',ROOT/'deploy'/'.env'):
+        if not env.exists():continue
+        for line in env.read_text(encoding='utf-8-sig').splitlines():
+            if '=' not in line or line.lstrip().startswith('#'):continue
+            key,value=line.split('=',1);value=value.strip().strip('\"\'')
+            if key.strip() in sensitive and len(value)>=8:result.append((key.strip(),value.encode()))
     return result
 
 def verify(path, secrets=(), expected=None):
@@ -69,8 +72,8 @@ def verify(path, secrets=(), expected=None):
             for key,value in secrets:
                 assert value not in data, 'Private value detected in '+name+' ('+key+'; value withheld)'
         top={n.split('/')[0] for n in names}
-        assert top=={'backend','frontend','docs','README.md','docker-compose.yml','.env.example','.gitignore'}, 'Unexpected top level: '+str(sorted(top))
-        for need in ('backend/Dockerfile','backend/docker/start.mjs','backend/prisma/schema.prisma','frontend/index.html','frontend/assets/js/core/oms.js'):
+        assert top=={'backend','frontend','deploy','docs','README.md','docker-compose.yml','.env.example','.gitignore','.dockerignore'}, 'Unexpected top level: '+str(sorted(top))
+        for need in ('backend/Dockerfile','backend/docker/start.mjs','backend/prisma/schema.prisma','frontend/index.html','frontend/assets/js/core/oms.js','deploy/compose.yaml','deploy/prebuilt.yaml','deploy/Caddyfile','deploy/.env.example'):
             assert need in names, 'Missing '+need
         assert any(n.startswith('backend/prisma/migrations/20261113190000_dom_routing/') for n in names)
         return {'entries':len(names),'secretScan':'PASS current configured private values absent','secretValuesCompared':len(secrets),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}

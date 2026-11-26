@@ -46,7 +46,8 @@
     const patches = db.productPatches || {};
     const out = [];
     D.products.concat(db.sellerProducts || []).forEach((base) => {
-      const p = Object.assign({}, base, patches[base.id] || {});
+      // EZMART price/stock/photos come from its catalogue, never old local seller-demo patches.
+      const p = Object.assign({}, base, base.omsSku ? {} : patches[base.id] || {});
       if (p.deleted) return;
       p.sold = (base.sold || 0) + ((db.soldDelta || {})[p.id] || 0);
       const cat = catMap.get(p.categoryId) || {};

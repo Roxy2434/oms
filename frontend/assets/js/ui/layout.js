@@ -102,13 +102,13 @@
         <div><h4>Về ShopVui</h4><ul><li><a href="#/help">Giới Thiệu Về ShopVui</a></li><li><a href="#/help">Điều Khoản ShopVui</a></li><li><a href="#/help">Chính Sách Bảo Mật</a></li><li><a href="#/search?mall=1">ShopVui Mall</a></li><li><a href="#/seller">Kênh Người Bán</a></li><li><a href="#/flash-sale">Flash Sale</a></li></ul></div>
         <div><h4>Thanh Toán</h4><div class="ftr-badges">${pays.map((x) => `<span>${x}</span>`).join('')}</div><h4 class="mt">Đơn Vị Vận Chuyển</h4><div class="ftr-badges">${ships.map((x) => `<span>${x}</span>`).join('')}</div></div>
         <div><h4>Theo Dõi ShopVui</h4><ul class="ftr-social"><li>${SV.icon('facebook', 16)} Facebook</li><li>${SV.icon('instagram', 16)} Instagram</li></ul></div>
-        <div><h4>Dữ Liệu Demo</h4><p class="ftr-note">Tài khoản, giỏ hàng, đơn hàng… được lưu trong LocalStorage của trình duyệt này.</p><button class="btn btn-sm" type="button" data-reset-demo>${SV.icon('refresh', 14)} Khôi phục dữ liệu mẫu</button></div>
+        <div><h4>Tải Ứng Dụng ShopVui</h4><p class="ftr-note">Mua sắm tiện lợi mọi lúc mọi nơi trên iOS &amp; Android, nhận thông báo trạng thái đơn hàng tức thì.</p></div>
       </div>
-      <div class="ftr-bottom"><span>© 2026 ShopVui · Website mô phỏng sàn thương mại điện tử phục vụ học tập</span><span>Quốc gia &amp; Khu vực: Việt Nam</span></div>
+      <div class="ftr-bottom"><span>© 2026 ShopVui Việt Nam. Tất cả các quyền được bảo lưu.</span><span>Quốc gia &amp; Khu vực: Việt Nam</span></div>
     </div>
     <div class="ftr-legal"><div class="container">
-      <p>ShopVui là sản phẩm demo cho tiểu luận, <b>không phải</b> sàn thương mại điện tử thật và không liên kết với bất kỳ doanh nghiệp nào.</p>
-      <p>Mọi giao dịch, thanh toán, vận chuyển đều là mô phỏng. Ảnh sản phẩm lấy từ bộ dữ liệu thử nghiệm công khai DummyJSON.</p>
+      <p>Công ty TNHH Thương Mại Điện Tử ShopVui · Tòa nhà Trung tâm Thương mại, Quận 1, TP. Hồ Chí Minh · Tổng đài CSKH: 1900 6868</p>
+      <p>Chính sách bảo mật · Quy chế hoạt động · Chính sách vận chuyển &amp; kiểm hàng · Chính sách đổi trả &amp; hoàn tiền</p>
     </div></div></footer>`;
   }
 
@@ -129,7 +129,7 @@
     const sticky = getComputedStyle(h).position === 'sticky';
     document.documentElement.style.setProperty('--hdr-h', (sticky && L.kind === 'main' ? h.offsetHeight : 0) + 'px');
   }
-  const miniFooter = () => `<footer class="ftr ftr-mini"><div class="container"><span>© 2026 ShopVui · Website mô phỏng phục vụ học tập</span><button class="btn btn-sm" type="button" data-reset-demo>${SV.icon('refresh', 14)} Khôi phục dữ liệu mẫu</button></div></footer>`;
+  const miniFooter = () => `<footer class="ftr ftr-mini"><div class="container"><span>© 2026 ShopVui Việt Nam · Mua sắm trực tuyến an toàn &amp; tiện lợi</span></div></footer>`;
 
   L.refreshHeader = () => {
     if (!L.kind) return;
@@ -207,7 +207,8 @@
     document.addEventListener('click', async (e) => {
       if (e.target.closest('[data-logout]')) {
         e.preventDefault();
-        SV.auth.logout();
+        const r = await SV.auth.logout();
+        if (!r.ok) return ui.toast(r.error, 'error');
         ui.toast('Đã đăng xuất', 'info');
         SV.go('/');
         return;
@@ -215,7 +216,7 @@
       const n = e.target.closest('[data-notif]');
       if (n) SV.notify.read(n.dataset.notif);
       if (e.target.closest('[data-reset-demo]')) {
-        if (await ui.confirm('Khôi phục dữ liệu mẫu? Toàn bộ tài khoản, giỏ hàng, đơn hàng bạn đã tạo trên trình duyệt này sẽ bị xoá.', { okText: 'Khôi phục' })) SV.db.reset();
+        if (await ui.confirm('Xóa bộ nhớ đệm và dữ liệu minh họa trên trình duyệt? Tài khoản, ví và đơn EZMART trên máy chủ không bị xóa.', { okText: 'Khôi phục' })) SV.db.reset();
       }
       const sim = e.target.closest('[data-similar]');
       if (sim) {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {writeFile,mkdir} from 'node:fs/promises';
 import {chromium} from '@playwright/test';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');const {createDraft}=await import('../src/domain/orders/service');const {orderCommand}=await import('../src/domain/orders/lifecycle');const {paymentCommand}=await import('../src/domain/payments/service');const {returnCommand}=await import('../src/domain/returns/service');const {allocationPreview}=await import('../src/domain/allocation/preview');const prefix='audit-'+randomUUID().slice(0,8),key=()=>randomUUID();
 const regression=process.argv.includes('--regression');const servicesOnly=process.argv.includes('--services-only');const findings:Record<string,unknown>[]=[];let browser;
 try{

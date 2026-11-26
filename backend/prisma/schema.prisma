@@ -5,6 +5,77 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+// Customer credentials and simulated wallet are separate from staff accounts and real bank funds.
+model ShopAccount {
+  id String @id @default(cuid())
+  username String @unique
+  email String? @unique
+  phone String? @unique
+  passwordHash String
+  name String
+  gender String @default("")
+  birthday String @default("")
+  addresses Json @default("[]")
+  balance Int @default(6000000)
+  sessionVersion Int @default(1)
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  entries ShopWalletEntry[]
+  purchases ShopPurchase[]
+  @@map("SHOP_TAI_KHOAN")
+}
+model ShopWalletEntry {
+  id String @id @default(cuid())
+  accountId String
+  key String @unique
+  kind String
+  amount Int
+  orderId String?
+  note String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  account ShopAccount @relation(fields:[accountId],references:[id],onDelete:Restrict)
+  @@index([accountId,createdAt])
+  @@map("SHOP_SO_VI")
+}
+model ShopPurchase {
+  orderId String @id
+  accountId String
+  payment String
+  realBankConsentAt DateTime? @db.Timestamptz(3)
+  charged Int
+  refunded Int @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  account ShopAccount @relation(fields:[accountId],references:[id],onDelete:Restrict)
+  order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  @@index([accountId,createdAt])
+  @@map("SHOP_DON_MUA")
+}
+model PublicRateLimit {
+  key String @id
+  count Int
+  expiresAt DateTime @db.Timestamptz(3)
+  @@index([expiresAt])
+  @@map("PUBLIC_RATE_LIMIT")
+}
+model SepayCursor {
+  id String @id
+  lastId String
+  syncedAt DateTime? @db.Timestamptz(3)
+  error String?
+  @@map("SEPAY_CURSOR")
+}
+model SepayInbox {
+  id String @id
+  amount Decimal @db.Decimal(14,0)
+  content String
+  reference String
+  state String @default("NEW")
+  orderId String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([state])
+  @@index([createdAt])
+  @@map("SEPAY_INBOX")
+}
 enum Role {
   NHAN_VIEN
   QUAN_LY
@@ -59,6 +130,7 @@ enum TransactionStatus {
   CHUA_RO
 }
 enum TransactionSource {
+  VI_MO_PHONG
   TIEN_MAT
   CHUYEN_KHOAN
   COD_MO_PHONG
@@ -188,6 +260,7 @@ model Order {
   shipments Shipment[]
   returns ReturnCase[]
   transactions MoneyTransaction[]
+  shopPurchase ShopPurchase?
   @@unique([channel,externalId])
   @@index([createdAt,status,channel])
   @@index([status,updatedAt])

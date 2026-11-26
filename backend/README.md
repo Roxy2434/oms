@@ -1,6 +1,18 @@
 # EZMART · Quản lý đơn hàng
 
-Ứng dụng đồ án chạy local, hai vai trò, 16 bảng nghiệp vụ; đơn một/hai kho, giao nhận mô phỏng, trả hàng–QC–thu/hoàn và báo cáo CSV. **Không phải hệ thống thương mại production.**
+## Profile VPS công khai
+
+Xem `../docs/public-deploy.md` và `../deploy/compose.yaml`. Profile riêng hỗ trợ COD/ví mô phỏng + SePay thật qua cờ opt-in, TLS, guard secret, Turnstile, quota bền vững, non-root và đối soát `/bank`. Bản local bên dưới vẫn tắt tiền thật. Không mở profile local lên Internet bằng cách đổi bind address.
+
+## Demo lặp lại — 26/11/2026
+
+10 SKU giảm đúng 50%, ảnh chụp local có nguồn/giấy phép, 17 ca DOM/RMA/báo cáo/ShopVui được chuẩn bị lại bằng `npm run demo:refresh` (backup → dừng đúng app → tạo lượt mới → mở lại). Guide và tài khoản demo: `storage/demo/LUOT-HIEN-TAI.md`. Bản đang chạy bật **OMS_DEMO_MODE=1**, khóa SePay tiền thật dù còn credentials. DB local trên máy này dùng **15432** qua OMS_DB_PORT; URL web3001/8000 không đổi. Hướng dẫn: `../docs/demo-repeatable.md`. Đánh giá deploy nhiều hướng và các gate chưa đạt: `../docs/deployment-readiness-20261126.md`. Chưa deploy lên Internet.
+
+## ShopVui — tài khoản và ví trên máy chủ (25/11/2026)
+
+Đăng ký/đăng nhập khách hàng thật; tài khoản mới nhận 6.000.000đ **ví mô phỏng một lần**. Trừ ví, tạo đơn và giữ hàng trong cùng transaction. Chỉ EZMART nhận đơn. Đã bỏ hoàn toàn API/nút tự xác nhận chuyển khoản demo, kể cả khi còn `SHOPVUI_DEMO_PAY=1`. SePay xác nhận tiền vào thật, không tự hoàn ngân hàng hoặc nạp vào ví mô phỏng. 3 bảng mới → 19 bảng nghiệp vụ; thêm nguồn `VI_MO_PHONG` để phân biệt chứng từ ví với chuyển khoản. Cần áp dụng 2 migration ngày25/11 trước khi mở build mới. Hướng dẫn/giới hạn/kiểm thử: `../docs/shopvui-server-accounts.md`. Các mô tả tài khoản demo/thanh toán phía trình duyệt bên dưới là lịch sử.
+
+Ứng dụng đồ án chạy local, hai vai trò, 19 bảng nghiệp vụ; đơn một/hai kho, giao nhận mô phỏng, trả hàng–QC–thu/hoàn và báo cáo CSV. **Không phải hệ thống thương mại production.**
 
 ## Phạm vi sửa 13/11/2026 — DOM, hàng hoàn và bàn giao
 
@@ -48,7 +60,7 @@ Trang `/login` dùng mô hình/bố cục từ `Untitled-1.html`, không còn mo
 - URL: **http://127.0.0.1:3001/dashboard**
 - Tài khoản: `quanly`, `nhanvien.an`, `nhanvien.binh`.
 - Mật khẩu khởi tạo: giá trị `BOOTSTRAP_PASSWORD` trong `.env` tại máy này; không commit hoặc ghi mật khẩu vào tài liệu.
-- PostgreSQL: Compose project `oms-course`, cổng **55432**, DB `oms`; test DB `oms_test`. Không dùng DB/cổng/volume của WarehouseFlow hoặc Lumina.
+- PostgreSQL: Compose project `oms-course`, cổng mặc định **55432** (máy hiện tại **15432**, cấu hình `OMS_DB_PORT` và hai URL), DB `oms`; test DB `oms_test`. Không dùng DB/cổng/volume của WarehouseFlow hoặc Lumina.
 - Phiên bản đã kiểm: Node 24.15.0, npm 11.12.1, Next 16.4.3, React 19.3.1, TypeScript 6.0.3, Prisma 7.10.1, PostgreSQL 17.11. Dependency exact trong `package-lock.json`; image 17-alpine đã khóa digest OCI trong `compose.yaml`.
 
 ## Dữ liệu mẫu có cách trình bày như vận hành thực

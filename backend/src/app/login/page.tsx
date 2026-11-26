@@ -24,7 +24,7 @@ export default function Login(){
     <div className="form-row"><span>Tài khoản được cấp bởi quản lý.</span></div>
     {error&&<div className="signin-error" id="signin-error" role="alert"><AlertCircle size={17} aria-hidden="true"/><span>{error}</span></div>}
     <button type="submit" className="submit-btn" disabled={busy}>{busy?<><LoaderCircle size={18} className="login-spinner" aria-hidden="true"/>Đang đăng nhập…</>:'Đăng nhập vào Hệ thống'}</button>
-   </form><p className="course-disclosure">EZMART · Hệ thống quản lý đơn hàng<br/>Vận chuyển & thanh toán mô phỏng</p>
+   </form><p className="course-disclosure">EZMART · Hệ thống quản lý đơn hàng &amp; kho vận đa kênh<br/>Hà Nội · Đà Nẵng · TP. Hồ Chí Minh</p>
   </div></section>
  </main></div>;
 }

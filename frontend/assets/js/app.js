@@ -1,10 +1,11 @@
 /* =========================================================
    app.js – Khởi động ứng dụng
    ========================================================= */
-(function () {
+(async function () {
   'use strict';
   SV.db.load();
   if (SV.db.isFresh()) SV.seedDemo(); // lần đầu mở: nạp dữ liệu mẫu (tài khoản demo, đơn hàng…)
+  await SV.account.bootstrap();
   SV.layout.init();
   window.addEventListener('hashchange', () => SV.router.render());
   // Dữ liệu thay đổi ở tab khác (ví dụ Kênh Người Bán) -> vẽ lại trang hiện tại

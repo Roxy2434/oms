@@ -8,7 +8,7 @@ import {db} from '../src/server/db';
 import {solveAllocation} from '../src/domain/allocation/solver';
 assert(process.argv.includes('--approved-live'),'Requires explicit approval: one receipt2HT, one split order, one RMA/QC/refund180k.');
 const origin='http://127.0.0.1:3001',dir='artifacts/demo/live-two-problems-20261029';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');assert.equal(url.pathname,'/oms');assert.equal(process.env.APP_ORIGIN,origin);
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');assert.equal(url.pathname,'/oms');assert.equal(process.env.APP_ORIGIN,origin);
 await mkdir(dir+'/raw',{recursive:true});const lock=await open(dir+'/manifest.json','wx');await lock.close();
 const manifest:{[key:string]:unknown}={status:'preflight',approved:'Operator selected LIVE and approved receiving2HT atDN, one order1BT+2HT, QC1pass1fail, refund180000. Local money/carrier simulations, no external transfers.',startedAt:new Date().toISOString(),backup:'storage/backups/oms_20261029_203918.dump',stage:'preflight',orderId:null,returnId:null,requests:[]};
 const requests:{endpoint:string;key:string;action?:string}[]=[];manifest.requests=requests;

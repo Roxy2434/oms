@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import assert from 'node:assert/strict';
 import {randomUUID,createHmac} from 'node:crypto';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');const {checkoutQuote,createCheckout}=await import('../src/domain/orders/checkout');const {orderCommand}=await import('../src/domain/orders/lifecycle');
 const ns='checkout-'+randomUUID().slice(0,8),sku1=ns+'-a',sku2=ns+'-b',wh1=ns+'-HN',wh2=ns+'-DN';
 try{

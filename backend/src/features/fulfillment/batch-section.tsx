@@ -51,7 +51,7 @@ export function BatchSection({title,description,rows:listed,actions,empty,actor,
     {handed&&handed.rows.length>0&&<><button type="button" className="button" onClick={printHandover}>In biên bản bàn giao</button>
     {/* Print-only sheet (hidden on screen): per warehouse, waybills, count, signatures, as in Sapo's handover SOP. */}
     <div className="handover-print">{byWarehouse.map(g=><section key={g.w} className="handover-doc"><h3>Biên bản bàn giao hàng cho đơn vị vận chuyển</h3>
-     <p>Kho: <strong>{g.w}</strong> · Thời điểm: {handed.at} · Người bàn giao: {actor??'—'} · Đơn vị vận chuyển: hãng vận chuyển (mô phỏng)</p>
+     <p>Kho: <strong>{g.w}</strong> · Thời điểm: {handed.at} · Người bàn giao: {actor??'—'} · Đơn vị vận chuyển: Đối tác giao nhận nhanh</p>
      <table><thead><tr><th>#</th><th>Mã vận đơn</th><th>Kiện</th><th>Đơn</th><th>Người nhận</th><th>Hàng</th></tr></thead><tbody>{g.rows.map((r,i)=><tr key={r.id}><td>{i+1}</td><td>{r.tracking}</td><td>{short(r.id)}</td><td>{r.orderId}</td><td>{r.recipient}</td><td>{r.items}</td></tr>)}</tbody></table>
      <p>Tổng số kiện: <strong>{g.rows.length}</strong>. Hai bên đã kiểm đếm đủ số kiện thực tế theo danh sách trên.</p>
      <div className="handover-sign"><div>Đại diện kho<br/><small>(ký, ghi rõ họ tên)</small></div><div>Đại diện đơn vị vận chuyển<br/><small>(ký, ghi rõ họ tên)</small></div></div></section>)}</div></>}

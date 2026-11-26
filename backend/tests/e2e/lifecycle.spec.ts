@@ -1,6 +1,11 @@
 import {test,expect} from '@playwright/test';
 import {spawnSync} from 'node:child_process';
+// Bank tests use fake SePay credentials; do not inherit the live demo-mode switch.
+process.env.OMS_DEMO_MODE='0';
 const cases=[
+ ['Demo mode: no bank config, QR or bank order even with credentials; wallet still works','check-demo-mode-ui.ts'],
+ ['ShopVui server accounts: registration, 6M once, cross-device wallet/orders, lost response and session revocation','check-shop-accounts-ui.ts'],
+ ['ShopVui simulated wallet: server debit, cancel/RMA refunds and browser-tamper resistance','check-shopvui-wallet.ts'],
  ['audit fixes and four task flows: one/two warehouses, partial return and damaged sender return','check-audit-fixes-ui.ts'],
  ['isolated production UI: order/RMA/payment, lost response retry, restart and DB failure recovery','check-order-ui.ts'],
  ['single-screen checkout: quote, atomic create/hold, stale quote and lost-response retry','check-checkout-ui.ts'],

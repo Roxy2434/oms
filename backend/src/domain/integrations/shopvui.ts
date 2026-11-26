@@ -4,6 +4,8 @@ import {randomBytes,createHmac,createHash,timingSafeEqual} from 'node:crypto';
 import {hash} from 'argon2';
 import {z} from 'zod';
 import {db} from '@/server/db';
+import {isDemoMode,isPublicDeployment} from '@/domain/demo-mode';
+import {bankSyncReady} from '@/domain/payments/sepay-sync';
 import {DomainError} from '@/server/commands';
 import {checkoutQuote,createCheckout} from '@/domain/orders/checkout';
 import {orderCommand} from '@/domain/orders/lifecycle';
@@ -21,7 +23,7 @@ export const cityOf=(province:string)=>NORTH.includes(province)?'HN' as const:CE
 const address=z.object({province:z.string().trim().min(2).max(60),ward:z.string().trim().max(120).default(''),detail:z.string().trim().min(2).max(300)});
 const items=z.array(z.object({sku:z.string().min(1).max(80),qty:z.number().int().min(1).max(5)})).min(1).max(5);
 const quoteInput=z.object({address,items});
-const orderInput=z.object({replayOnly:z.boolean().optional(),token:z.string().max(64).optional(),recoveryKey:z.string().min(32).max(128).optional(),orderId:z.string().trim().min(1).max(80),name:z.string().trim().min(2).max(120),phone:z.string().regex(/^[0-9+ ()-]{8,20}$/),address,items,payment:z.enum(['cod','wallet','bank'])});
+const orderInput=z.object({replayOnly:z.boolean().optional(),token:z.string().max(64).optional(),recoveryKey:z.string().min(32).max(128).optional(),orderId:z.string().trim().min(1).max(80),name:z.string().trim().min(2).max(120),phone:z.string().regex(/^[0-9+ ()-]{8,20}$/),address,items,payment:z.enum(['cod','wallet','bank']),realBankAcknowledged:z.boolean().default(false)});
 const refInput=z.object({orderId:z.string().trim().min(1).max(80),token:z.string().max(64).default('')});
 const text=(a:z.infer<typeof address>)=>[a.detail,a.ward,a.province].filter(Boolean).join(', ');
 const lines=(list:z.infer<typeof items>)=>list.map(i=>({skuId:i.sku,quantity:i.qty}));
@@ -34,36 +36,41 @@ function ownRef<T extends {orderId:string;token:string}>(r:T){if(!owns(r.orderId
 
 /** Unpaid bank-transfer orders hold stock; after this window OMS cancels them and releases the stock (like a payment gateway's expiry). */
 export const PAY_MINUTES=10;
-/** Presentation switch (.env SHOPVUI_DEMO_PAY=1): the payment page shows "Đã thanh toán (demo)", which records the receipt
- * without real money, clearly marked DEMO. Off by default: with it on, a buyer can mark their own order paid. Real SePay
- * transfers keep working either way. */
-export const demoPayEnabled=()=>process.env.SHOPVUI_DEMO_PAY==='1';
+/** Compatibility field for old clients. Browser self-confirmation has been permanently removed. */
+export const demoPayEnabled=()=>false;
 export const EXPIRED_REASON='ShopVui: quá hạn thanh toán chuyển khoản ('+PAY_MINUTES+' phút)';
 const payBy=(o:{confirmedAt:Date|null})=>o.confirmedAt?new Date(o.confirmedAt.getTime()+PAY_MINUTES*60000).toISOString():null;
 
 /** The storefront's system user: every ShopVui order is recorded as created by it (audit); its password is random and never shown, so it cannot log in. */
-async function actor(){return db.account.upsert({where:{username:'shopvui'},update:{},create:{username:'shopvui',name:'Kênh ShopVui (tích hợp)',role:'NHAN_VIEN',passwordHash:await hash(randomBytes(32).toString('hex'))}});}
+let cachedActor:{id:string}|null=null;
+async function actor(){if(cachedActor){const ok=await db.account.findUnique({where:{id:cachedActor.id},select:{id:true,active:true}});if(ok?.active)return {id:ok.id};cachedActor=null;}const existing=await db.account.findUnique({where:{username:'shopvui'}});if(existing){cachedActor={id:existing.id};return existing;}const created=await db.account.upsert({where:{username:'shopvui'},update:{},create:{username:'shopvui',name:'Kênh ShopVui (tích hợp)',role:'NHAN_VIEN',passwordHash:await hash(randomBytes(32).toString('hex'))}});cachedActor={id:created.id};return created;}
 /** ShopVui and OMS share one order code (DH-...): the storefront issues it, OMS stores it as the order id. */
-async function find(orderId:string){return db.order.findFirst({where:{id:orderId,channel:'SHOPVUI'},include:{shipments:{include:{lines:true}},transactions:true,lines:true}});}
+async function find(orderId:string){return db.order.findFirst({where:{id:orderId,channel:'SHOPVUI'},include:{shopPurchase:{select:{payment:true}},shipments:{include:{lines:true}},transactions:true,lines:true}});}
 /** Prepaid state for the storefront: paid = the bank/gateway money fully arrived; qr = what to scan for the rest (SePay on). */
-function payment(o:Parameters<typeof prepaidDue>[0]&{id:string;paymentMethod:string;confirmedAt:Date|null;transactions:Parameters<typeof moneyPosition>[0]}):{paid?:boolean;qr?:{url:string;amount:number;note:string;account:string;bankName:string;holder:string;payBy:string|null;demo:boolean}}{
+function payment(o:Parameters<typeof prepaidDue>[0]&{id:string;paymentMethod:string;confirmedAt:Date|null;shopPurchase?:{payment:string}|null;transactions:Parameters<typeof moneyPosition>[0]}):{paid?:boolean;qr?:{url:string;amount:number;note:string;account:string;bankName:string;holder:string;payBy:string|null;demo:boolean}}{
  if(o.paymentMethod!=='TRA_TRUOC')return {};
- const due=prepaidDue(o),cfg=sepayConfig(),paid=Number(effectiveValue(o))>0&&moneyPosition(o.transactions).net>=Number(effectiveValue(o));
+ const due=prepaidDue(o),cfg=o.shopPurchase&&o.shopPurchase.payment!=='bank'?null:sepayConfig(),paid=Number(effectiveValue(o))>0&&moneyPosition(o.transactions).net>=Number(effectiveValue(o));
  return {paid,...(cfg&&due>0&&o.status==='DA_XAC_NHAN'?{qr:{url:qrUrl(cfg,o.id,due),amount:due,note:payCode(o.id),account:cfg.account,bankName:cfg.bankName,holder:cfg.holder,payBy:payBy(o),demo:demoPayEnabled()}}:{})};
 }
 
 /** Live price and sellable quantity (ATP summed over active warehouses) so the storefront never oversells. */
 export async function catalog(){
- const skus=await db.sku.findMany({where:{active:true},orderBy:{id:'asc'},include:{inventory:{where:{warehouse:{active:true}}}}});
- return {products:skus.map(s=>({sku:s.id,name:s.name+(s.variant?' — '+s.variant:''),price:Number(s.price),available:s.inventory.reduce((n,i)=>n+Math.max(0,i.sellable-i.reserved-i.safety),0)}))};
+ const rows=await db.$queryRaw<{id:string;name:string;variant:string|null;price:unknown;available:number}[]>`SELECT s.id, s.ten_san_pham AS name, s.bien_the AS variant, s.gia_ban AS price, COALESCE(SUM(CASE WHEN k.dang_hoat_dong THEN GREATEST(0, t.ton_ban_duoc - t.dang_giu - t.ton_an_toan) ELSE 0 END), 0)::int AS available FROM "SKU" s LEFT JOIN "TON_KHO" t ON t.sku_id = s.id LEFT JOIN "KHO" k ON k.id = t.kho_id WHERE s.dang_kinh_doanh = true GROUP BY s.id, s.ten_san_pham, s.bien_the, s.gia_ban ORDER BY s.id ASC`;
+ return {demoMode:isDemoMode(),realBankConsentRequired:isPublicDeployment(),refundContact:process.env.SEPAY_REFUND_CONTACT||'',bankAvailable:!!sepayConfig()&&(!isPublicDeployment()||await bankSyncReady()),products:rows.map(s=>({sku:s.id,name:s.name+(s.variant?' — '+s.variant:''),price:Number(s.price),available:Number(s.available)}))};
 }
 export async function quote(raw:unknown){
  const p=quoteInput.parse(raw);const q=await checkoutQuote({city:cityOf(p.address.province),address:text(p.address),lines:lines(p.items)});
  return {ok:q.shippingFee!==null,shippingFee:q.shippingFee,goods:q.goods,total:q.total,parcels:q.plan?.parcels.length??0,reasons:q.reasons};
 }
 
-export async function placeOrder(raw:unknown){
+export async function placeOrder(raw:unknown,buyerId?:string){
  const p=orderInput.parse(raw);const existing=await find(p.orderId);
+ if(buyerId&&existing){const purchase=await db.shopPurchase.findUnique({where:{orderId:p.orderId}});if(purchase?.accountId!==buyerId)throw new DomainError('Đơn không thuộc tài khoản này.',403);}
+ if(buyerId&&!existing&&p.payment==='bank'&&isPublicDeployment()){
+  if(!p.realBankAcknowledged)throw new DomainError('Xác nhận SePay chuyển tiền thật; web demo không giao hàng thật.',422);
+  if(!await bankSyncReady())throw new DomainError('Đối soát ngân hàng chưa sẵn sàng. Chọn COD/ví mô phỏng hoặc thử lại sau.',409);
+ }
+ if(buyerId&&!existing&&p.payment==='bank'&&!sepayConfig())throw new DomainError('SePay chưa được cấu hình. Vui lòng dùng ví mô phỏng hoặc COD.',409);
  if(existing){
   const recovery=p.recoveryKey?createHash('sha256').update(p.recoveryKey).digest('hex'):null;
   const recovered=!!recovery&&!!existing.storefrontRecoveryHash&&timingSafeEqual(Buffer.from(recovery),Buffer.from(existing.storefrontRecoveryHash));
@@ -78,24 +85,29 @@ export async function placeOrder(raw:unknown){
  if(!/^DH-\d{6}-[0-9A-F]{6}$/.test(p.orderId))throw new DomainError('Mã đơn hàng phải có dạng DH-YYMMDD-XXXXXX.',422);
  if(await db.order.findUnique({where:{id:p.orderId},select:{id:true}}))throw new DomainError('Mã đơn hàng '+p.orderId+' đã tồn tại. Vui lòng đặt lại.',409);
  const city=cityOf(p.address.province),addr=text(p.address);
- const q=await checkoutQuote({city,address:addr,lines:lines(p.items)});if(!q.quote)throw new DomainError(q.reasons.join(' ')||'Chưa xếp được kho cho đơn này.',409);
  const customer=await db.customer.findFirst({where:{phone:p.phone},orderBy:{createdAt:'asc'}});
  const me=await actor();
- const r=await createCheckout(me.id,'shopvui:'+p.orderId,{orderId:p.orderId,city,address:addr,lines:lines(p.items),...(customer?{customerId:customer.id}:{newCustomer:true}),recipient:p.name,phone:p.phone,channel:'SHOPVUI',storefrontRecoveryHash:p.recoveryKey?createHash('sha256').update(p.recoveryKey).digest('hex'):undefined,paymentMethod:p.payment==='cod'?'COD':'TRA_TRUOC',paidOnline:p.payment==='wallet',quote:q.quote});
- return {orderId:r.id,shippingFee:r.shippingFee,parcels:r.parcels,replay:false,token:orderToken(p.orderId),...payment((await find(p.orderId))!)};
+ let lastErr:unknown;
+ for(let reQuote=0;reQuote<3;reQuote++){
+  const q=await checkoutQuote({city,address:addr,lines:lines(p.items)});if(!q.quote)throw new DomainError(q.reasons.join(' ')||'Chưa xếp được kho cho đơn này.',409);
+  try{
+   const cmdKey=reQuote===0?'shopvui:'+p.orderId:`shopvui:${p.orderId}:rq${reQuote}`;
+   const r=await createCheckout(me.id,cmdKey,{orderId:p.orderId,city,address:addr,lines:lines(p.items),...(customer?{customerId:customer.id}:{newCustomer:true}),recipient:p.name,phone:p.phone,channel:'SHOPVUI',storefrontRecoveryHash:p.recoveryKey?createHash('sha256').update(p.recoveryKey).digest('hex'):undefined,paymentMethod:p.payment==='cod'?'COD':'TRA_TRUOC',paidOnline:p.payment==='wallet',quote:q.quote},buyerId?{id:buyerId,payment:p.payment,realBankAcknowledged:p.realBankAcknowledged}:undefined);
+   return {orderId:r.id,shippingFee:r.shippingFee,parcels:r.parcels,replay:false,token:orderToken(p.orderId),...payment((await find(p.orderId))!)};
+  }catch(e){
+   lastErr=e;
+   // If another student depleted the chosen warehouse mid-flight while another warehouse still has ATP, re-quote seamlessly!
+   if(e instanceof DomainError&&e.status===409&&/thay đổi \/ báo phí hết hạn/.test(e.message)&&reQuote<2)continue;
+   throw e;
+  }
+ }
+ throw lastErr;
 }
 
-/** Buyer finished the bank transfer on ShopVui: record the prepaid receipt for what is still due. */
-export async function pay(raw:unknown){
- // With real transfers on, only the bank (via SePay) can say the money arrived, unless the demo switch is on.
- const demo=!!sepayConfig();
- if(demo&&!demoPayEnabled())throw new DomainError('Chuyển khoản do ngân hàng xác nhận tự động qua SePay, không ghi tay được.',403);
- const {orderId}=ownRef(refInput.parse(raw));const o=await find(orderId);if(!o)throw new DomainError('EZMART không có đơn này.',404);
- const due=prepaidDue(o);
- if(due<=0)return {orderId:o.id,paid:0};
- const me=await actor();
- await paymentCommand(me.id,'shopvui-pay:'+orderId,o.id,{action:'record',kind:'THU',reason:'THU_TRA_TRUOC',amount:due,source:'CHUYEN_KHOAN',reference:(demo?'DEMO-':'SV-')+orderId,note:demo?'DEMO trình diễn: bấm "Đã thanh toán (demo)" trên ShopVui, không có tiền thật':'Khách chuyển khoản trên ShopVui (mô phỏng)',status:'THANH_CONG'});
- return {orderId:o.id,paid:due};
+/** A browser can NEVER attest that a real bank transfer arrived, even when SePay is unconfigured. */
+export async function pay(raw:unknown):Promise<never>{
+ void raw;
+ throw new DomainError('Chuyển khoản chỉ được xác nhận tự động qua SePay. Không hỗ trợ tự xác nhận thanh toán.',403);
 }
 
 export async function cancel(raw:unknown){
@@ -106,8 +118,9 @@ export async function cancel(raw:unknown){
  // Real bank transfers are refunded by staff (dashboard queue "Đơn hủy còn tiền phải hoàn"). Runs on replay too, so a lost refund is retried.
  const fresh=(await find(p.orderId))!;const refundable=moneyPosition(fresh.transactions).available;
  if(refundable>0&&fresh.transactions.some(t=>t.reference==='CTT-'+fresh.id&&t.status==='THANH_CONG'))
-  await paymentCommand(me.id,'shopvui-cancel-refund:'+p.orderId,fresh.id,{action:'record',kind:'HOAN',reason:'HOAN_HUY',amount:refundable,source:'CHUYEN_KHOAN',reference:'HTV-'+fresh.id,note:'Hoàn về Ví ShopVuiPay khi khách hủy đơn (mô phỏng)',status:'THANH_CONG'});
- return {orderId:o.id,refunded:refundable>0};
+  await paymentCommand(me.id,'shopvui-cancel-refund:'+p.orderId,fresh.id,{action:'record',kind:'HOAN',reason:'HOAN_HUY',amount:refundable,source:fresh.transactions.some(t=>t.source==='VI_MO_PHONG')?'VI_MO_PHONG':'CHUYEN_KHOAN',reference:'HTV-'+fresh.id,note:'Hoàn về Ví ShopVuiPay khi khách hủy đơn (mô phỏng)',status:'THANH_CONG'});
+ const hasCancelRefund=fresh.transactions.some(t=>t.kind==='HOAN'&&t.reason==='HOAN_HUY'&&t.status==='THANH_CONG')||(refundable>0&&fresh.transactions.some(t=>t.reference==='CTT-'+fresh.id&&t.status==='THANH_CONG'));
+ return {orderId:o.id,refunded:hasCancelRefund,refundPending:refundable>0&&!hasCancelRefund};
 }
 
 export type ShopVuiStatus={orderId:string;status:'TO_SHIP'|'SHIPPING'|'COMPLETED'|'CANCELLED';stage:'confirmed'|'packed'|'shipping'|'failed'|'delivered'|'cancelled'|'returned';tracking:string[];deliveredAt:string|null;note:string;returnedParcels:number};
@@ -172,7 +185,7 @@ const returnStage=(st:string[])=>st.every(x=>x==='TU_CHOI')?'rejected':st.some(x
 /** refs: (orderId, token) pairs; refs whose token does not match are ignored, so nobody reads orders they did not place. */
 export async function statuses(refs:{orderId:string;token:string}[]){
  const list=[...new Set(refs.slice(0,100).filter(r=>owns(r.orderId,r.token)).map(r=>r.orderId))];
- const all=await db.order.findMany({where:{channel:'SHOPVUI',id:{in:list}},select:{id:true,status:true,reason:true,confirmedAt:true,paymentMethod:true,shippingFee:true,lines:{select:{id:true,quantity:true,priceSnapshot:true}},shipments:{select:{status:true,trackingCode:true,deliveredAt:true,handedOverAt:true,lines:{select:{orderLineId:true,quantity:true}}}},transactions:true,returns:{select:{id:true,kind:true,code:true,trackingCode:true,status:true}}}});
+ const all=await db.order.findMany({where:{channel:'SHOPVUI',id:{in:list}},select:{id:true,status:true,reason:true,confirmedAt:true,paymentMethod:true,shopPurchase:{select:{payment:true}},shippingFee:true,lines:{select:{id:true,quantity:true,priceSnapshot:true}},shipments:{select:{status:true,trackingCode:true,deliveredAt:true,handedOverAt:true,lines:{select:{orderLineId:true,quantity:true}}}},transactions:true,returns:{select:{id:true,kind:true,code:true,trackingCode:true,status:true}}}});
  const orders=all.map(o=>({...o,returns:o.returns.filter(r=>r.kind==='KHACH_TRA'),senderReturns:o.returns.filter(r=>r.kind==='CHUYEN_HOAN')}));
  return {orders:orders.map(o=>({...storefrontStatus(o),...payment(o),
   // Every successful refund of this order (cancel, return, sender return), net of compensations: ShopVui credits it to the buyer's ShopVuiPay wallet.

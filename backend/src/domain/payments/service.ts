@@ -1,18 +1,19 @@
-import {moneyPosition,causeAmount,missingShippingFee,rootedMoney,returnDeductions,returnRefundCapacity,codRefundPool,type Money,type RefundCase} from './balances';
+import {moneyPosition,caseEntitlement,causeAmount,missingShippingFee,rootedMoney,returnDeductions,returnRefundCapacity,codRefundPool,type Money,type RefundCase} from './balances';
 import {resolveOrderId} from '@/domain/orders/identifiers';
 import {z} from 'zod';
 import {command,DomainError,type Tx} from '@/server/commands';
 import {effectiveValue} from '@/domain/dashboard/queries';
+import {isPublicDeployment} from '@/domain/demo-mode';
 const input=z.discriminatedUnion('action',[
- z.object({action:z.literal('record'),kind:z.enum(['THU','HOAN']),reason:z.enum(['THU_TRA_TRUOC','THU_COD','THU_PHI_CON_THIEU','HOAN_HUY','HOAN_RMA','HOAN_BU_THU_SAI','THU_BU_HOAN_SAI']),amount:z.number().int().positive().max(999999999999),source:z.enum(['TIEN_MAT','CHUYEN_KHOAN','COD_MO_PHONG']),reference:z.string().trim().min(3).max(120),note:z.string().trim().min(3).max(300),status:z.enum(['CHO_XAC_NHAN','THANH_CONG','THAT_BAI','CHUA_RO']),returnId:z.string().min(1).optional(),shipmentId:z.string().min(1).optional(),originalId:z.string().min(1).optional()}),
- z.object({action:z.literal('resolve'),transactionId:z.string(),status:z.enum(['THANH_CONG','THAT_BAI','CHUA_RO']),note:z.string().trim().min(3).max(300)})
+ z.object({action:z.literal('record'),kind:z.enum(['THU','HOAN']),reason:z.enum(['THU_TRA_TRUOC','THU_COD','THU_PHI_CON_THIEU','HOAN_HUY','HOAN_RMA','HOAN_BU_THU_SAI','THU_BU_HOAN_SAI']),amount:z.number().int().positive().max(999999999999),source:z.enum(['TIEN_MAT','CHUYEN_KHOAN','COD_MO_PHONG','VI_MO_PHONG']),reference:z.string().trim().min(3).max(120),note:z.string().trim().min(3).max(300),status:z.enum(['CHO_XAC_NHAN','THANH_CONG','THAT_BAI','CHUA_RO']),returnId:z.string().min(1).optional(),shipmentId:z.string().min(1).optional(),originalId:z.string().min(1).optional(),bankEvidenceConfirmed:z.boolean().optional()}),
+ z.object({action:z.literal('resolve'),transactionId:z.string(),bankEvidenceConfirmed:z.boolean().optional(),status:z.enum(['THANH_CONG','THAT_BAI','CHUA_RO']),note:z.string().trim().min(3).max(300)})
 ]);
 export async function reconcileReturns(tx:Tx,o:{paymentMethod:string;shipments:{id:string;codAmount:unknown}[];returns:(RefundCase&{status:string})[]},rows:Money[]){
  if(o.paymentMethod==='COD'&&!codRefundPool(rows,o.returns,o.shipments).feasible)throw new DomainError('Thay đổi tiền làm vượt hạn mức hoàn của kiện nguồn. Kiểm tra các chứng từ thu/hoàn và bù liên quan.');
  for(const r of o.returns.filter(r=>r.status==='DA_DONG')){
   const pending=rootedMoney(rows).some(x=>x.root.returnId===r.id&&['CHO_XAC_NHAN','CHUA_RO'].includes(x.transaction.status));
   const refunded=causeAmount(rows,'HOAN',t=>t.reason==='HOAN_RMA'&&t.returnId===r.id);
-  const unpaid=o.paymentMethod==='COD'?codRefundPool(rows,o.returns,o.shipments,r.id).remaining>0:r.lines.reduce((n,l)=>n+l.refundQuantity*Number(l.shipmentLine.orderLine.priceSnapshot),0)>refunded;
+  const unpaid=o.paymentMethod==='COD'?codRefundPool(rows,o.returns,o.shipments,r.id).remaining>0:caseEntitlement(r)>refunded;
   if(pending||unpaid)await tx.returnCase.update({where:{id:r.id},data:{status:'CHO_HOAN_TIEN',closedAt:null,version:{increment:1}}});
  }
 }
@@ -20,13 +21,19 @@ export async function paymentCommand(actorId:string,key:string,orderId:string,ra
  orderId=resolveOrderId(orderId);const p=input.parse(raw);
  return command(actorId,key,'MONEY_'+p.action,'DON_HANG',orderId,p,async tx=>{
   await tx.$queryRaw`SELECT id FROM "DON_HANG" WHERE id=${orderId} FOR UPDATE`;
-  const o=await tx.order.findUnique({where:{id:orderId},include:{lines:true,shipments:{include:{lines:true}},transactions:true,returns:{include:{lines:{include:{shipmentLine:{include:{orderLine:true}}}}}}}});
+  const o=await tx.order.findUnique({where:{id:orderId},include:{shopPurchase:true,lines:true,shipments:{include:{lines:true}},transactions:true,returns:{include:{lines:{include:{shipmentLine:{include:{orderLine:true}}}}}}}});
   if(!o)throw new DomainError('Không có đơn.',404);const at=new Date();
+  if(isPublicDeployment()&&o.shopPurchase?.payment==='bank'){
+   if((await tx.account.findUniqueOrThrow({where:{id:actorId}})).role!=='QUAN_LY')throw new DomainError('Chỉ Quản lý được đối soát/ghi hoàn ngân hàng thật.',403);
+   if(p.action==='record'&&p.source!=='CHUYEN_KHOAN')throw new DomainError('Không dùng nguồn mô phỏng cho khoản ngân hàng thật.',422);
+   if(p.status==='THANH_CONG'&&!p.bankEvidenceConfirmed)throw new DomainError('Cần xác nhận đã đối chiếu chứng từ ngân hàng thật. Hệ thống không tự chuyển hoàn.',422);
+  }
   if(p.action==='resolve'){
    const t=o.transactions.find(t=>t.id===p.transactionId);if(!t||!['CHO_XAC_NHAN','CHUA_RO'].includes(t.status))throw new DomainError('Chỉ tra soát tiền còn chờ/chưa rõ.');
    await tx.moneyTransaction.update({where:{id:t.id},data:{status:p.status,note:t.note+'; '+p.note,confirmedAt:p.status==='THANH_CONG'?at:null,approvedById:actorId,version:{increment:1}}});
    await reconcileReturns(tx,o,o.transactions.map(x=>x.id===t.id?{...x,status:p.status}:x));return {id:orderId,transactionId:t.id};
   }
+  if(o.shopPurchase?.payment==='bank'&&p.kind==='THU'&&p.reason==='THU_TRA_TRUOC')throw new DomainError('Đơn chuyển khoản ShopVui chỉ nhận chứng từ thu tự động từ SePay.',403);
   if(p.shipmentId&&!o.shipments.some(s=>s.id===p.shipmentId)||p.returnId&&!o.returns.some(r=>r.id===p.returnId)||p.originalId&&!o.transactions.some(t=>t.id===p.originalId))throw new DomainError('Tham chiếu không thuộc đơn.',422);
   const compensating=['HOAN_BU_THU_SAI','THU_BU_HOAN_SAI'].includes(p.reason);
   if(!compensating&&p.originalId!==undefined)throw new DomainError('Chỉ chứng từ bù sai sót mới được gắn giao dịch gốc.',422);

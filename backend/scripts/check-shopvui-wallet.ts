@@ -1,6 +1,7 @@
 // E2E: ShopVuiPay wallet. Top up, pay an OMS order from the wallet, cancel it (OMS refunds → wallet credited back),
 // pay again, ship, return and inspect in OMS (auto refund → wallet credited). Isolated OMS on 3002 + oms_test, storefront on 8001.
 import 'dotenv/config';
+import {setupShopBuyer} from './helpers/shop-buyer';
 import {spawn,type ChildProcess} from 'node:child_process';
 import {createServer as netServer} from 'node:net';
 import {createServer,type Server} from 'node:http';
@@ -10,7 +11,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {randomUUID} from 'node:crypto';
 import {chromium,expect,type Page} from '@playwright/test';
 import assert from 'node:assert/strict';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');const {shipmentBatch}=await import('../src/domain/orders/batch');const {returnCommand}=await import('../src/domain/returns/service');
 const oms='http://127.0.0.1:3002',shop='http://127.0.0.1:8001',ns='svw-'+randomUUID().slice(0,8),dir='artifacts/qa/shopvui-wallet';
 let server:ChildProcess|undefined,files:Server|undefined;const b=await chromium.launch({channel:'msedge',headless:true});const started=new Date();
@@ -39,13 +40,13 @@ try{
  let ready=false;for(let n=0;n<80;n++){try{if((await fetch(oms+'/api/health')).ok){ready=true;break;}}catch{}await delay(100);}assert(ready);
  const c=await b.newContext({viewport:{width:1366,height:900}});await c.addInitScript(`window.SV_OMS={base:'${oms}/api/integrations/shopvui',key:'shopvui-local-demo',shopId:'oms'}`);
  const p=await c.newPage();const errors:string[]=[];p.on('pageerror',e=>errors.push(e.message));
- await p.goto(shop+'/#/login');await p.locator('input[name=account]').fill('demo');await p.locator('input[type=password]').first().fill('Demo1234');await p.getByRole('button',{name:'ĐĂNG NHẬP',exact:true}).click();await expect(p).not.toHaveURL(/#\/login/);
+ const buyer=await setupShopBuyer(c,oms,shop,ns);await p.goto(shop+'/#/login');await p.locator('input[name=account]').fill(buyer.username);await p.locator('input[type=password]').first().fill(buyer.password);await p.getByRole('button',{name:'ĐĂNG NHẬP',exact:true}).click();await expect(p).not.toHaveURL(/#\/login/);
 
  // 1. Wallet page: every account starts with 6,000,000 and there is no top-up.
  const START=6000000;
  await p.goto(shop+'/#/user/wallet');await expect(p.locator('.wallet-card')).toContainText('6.000.000');
  assert.equal(await p.getByRole('button',{name:'Nạp tiền'}).count(),0,'no top-up');assert.equal(await balance(p),START);
- await p.reload();assert.equal(await balance(p),START,'opening balance granted once');
+ await p.reload();await expect.poll(()=>balance(p)).toBe(START);
 
  // 2. Pay an OMS order from the wallet, then cancel it: OMS refunds to the wallet and the storefront credits it back.
  const first=await buyWithWallet(p);assert.equal(await balance(p),START-first.total,'wallet debited by the order total');
@@ -77,15 +78,11 @@ try{
  await p.goto(shop+'/#/user/wallet');await expect(p.locator('.wallet-tx li')).toHaveCount(5);await expect(p.locator('.wallet-tx')).toContainText('Hoàn tiền');await expect(p.locator('.wallet-tx')).toContainText('Số dư ban đầu');
  await p.screenshot({path:dir+'/wallet-1366.png',fullPage:true});await p.setViewportSize({width:390,height:844});await p.reload();await expect(p.locator('.wallet-card')).toBeVisible();
  assert(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'no horizontal overflow at 390');await p.screenshot({path:dir+'/wallet-390.png',fullPage:true});
- // 5. Not enough balance: checkout warns and placing the order is refused (balance lowered in the browser store for the test only).
- await p.setViewportSize({width:1366,height:900});
- await p.evaluate(()=>{const S=(window as unknown as {SV:{db:{data:()=>{walletTx:object[];session:string};save:()=>void}}}).SV;const d=S.db.data();d.walletTx.push({id:'w-test',userId:d.session,type:'PAY',amount:-5950000,note:'QA',at:new Date().toISOString()});S.db.save();});
- const low=await balance(p);assert(low<105000);
- await p.goto(shop+'/#/product/oms-HT-1200');await p.getByRole('button',{name:'Mua Ngay'}).click();await expect(p).toHaveURL(/#\/checkout/);
- await expect(p.locator('.co-group').filter({hasText:'EZMART'}).locator('.co-ship')).toContainText('Giao từ kho EZMART',{timeout:10000});
- await p.locator('[data-pay=wallet]').click();await expect(p.locator('.co-wallet-low')).toBeVisible();
- const before=await db.order.count({where:{channel:'SHOPVUI'}});await p.locator('[data-act=place]').click();await expect(p.getByText(/không đủ để thanh toán/).first()).toBeVisible({timeout:5000});
- assert.equal(await db.order.count({where:{channel:'SHOPVUI'}}),before,'no order created');assert.equal(await balance(p),low,'balance unchanged');
+ // 5. Browser-ledger tampering cannot alter the server-owned wallet. Insufficient/concurrent spending is covered by check-shop-accounts.ts.
+ const trusted=await balance(p);
+ await p.evaluate(()=>{const S=(window as unknown as {SV:{db:{data:()=>{walletTx:object[];session:string};save:()=>void}}}).SV;const d=S.db.data();d.walletTx.push({id:'w-test',userId:d.session,type:'OPEN',amount:999999999,note:'Forged local credit',at:new Date().toISOString()});S.db.save();});
+ assert.equal(await balance(p),trusted,'local ledger is not payment authority');
+ await p.reload();await expect.poll(()=>balance(p)).toBe(trusted);
  assert.deepEqual(errors,[]);
  console.log(JSON.stringify({result:'PASS',paid:[first.total,second.total],refundedRma:Number(refund.amount),balance:await balance(p),scope:'ShopVui wallet ↔ OMS refunds; oms_test only'}));
 }finally{server?.kill();files?.close();await b.close();await db.$disconnect();}

@@ -119,7 +119,6 @@
       ['Sản Phẩm Đang Ẩn', s.todo.hidden, '#/seller/products?tab=hidden'],
     ];
     main.innerHTML = `${pendingElsewhere()}
-      <div class="sc-tip">${SV.icon('help', 16)} <span><b>Mẹo demo:</b> đăng nhập tài khoản demo, đặt hàng ở trang mua sắm, rồi quay lại đây chọn đúng shop để <b>Xác nhận → Giao cho ĐVVC → Đã giao</b>. Mở 2 tab (người mua / người bán) để thấy dữ liệu đồng bộ.</span></div>
       <section class="sc-card"><h3>Danh sách cần làm</h3><div class="sub">Những việc bạn sẽ phải làm của shop <b>${U.esc(shop.name)}</b></div>
         <div class="todo">${todo.map(([t, n, href]) => `<a href="${href}"><b>${n}</b><span>${t}</span></a>`).join('')}</div></section>
       <section class="sc-card"><h3>Phân Tích Bán Hàng</h3><div class="sub">Tổng quan dữ liệu của shop (đơn đã đặt, trừ đơn hủy/hoàn tiền)</div>
@@ -148,7 +147,7 @@
       if (o.oms && ['UNPAID', 'TO_SHIP', 'SHIPPING', 'RETURN'].includes(o.status)) return '<span class="muted small">Kho EZMART xử lý</span>';
       if (o.status === 'TO_SHIP' && !o.confirmed) return btn('confirm', o.id, 'Xác nhận đơn', true) + btn('cancel', o.id, 'Hủy đơn');
       if (o.status === 'TO_SHIP') return btn('ship', o.id, 'Giao cho ĐVVC', true);
-      if (o.status === 'SHIPPING') return btn('deliver', o.id, 'Đã giao (mô phỏng)', true);
+      if (o.status === 'SHIPPING') return btn('deliver', o.id, 'Xác nhận đã giao', true);
       if (o.status === 'RETURN' && !o.refunded) return btn('refund', o.id, 'Chấp nhận hoàn tiền', true);
       if (o.status === 'UNPAID') return '<span class="muted small">Chờ người mua thanh toán</span>';
       return '<span class="muted small">—</span>';

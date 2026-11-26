@@ -1,4 +1,4 @@
-import {causeAmount,causeHasPending,codRefundPool,returnRefundCapacity} from '@/domain/payments/balances';
+import {caseEntitlement,causeAmount,causeHasPending,codRefundPool,returnRefundCapacity} from '@/domain/payments/balances';
 import {resolveOrderId,issueDocumentCode} from '@/domain/orders/identifiers';
 import {z} from 'zod';
 import {causeFromReason} from './labels';
@@ -72,7 +72,7 @@ async function qcLine(tx:Tx,r:Loaded,line:Line,q:{passed:number;failed:number;re
 async function closeCase(tx:Tx,id:string,reason:string,actorId:string,at:Date){
  const r=await load(tx,id);const orderId=r.orderId;
  if(r.status!=='CHO_HOAN_TIEN'||r.lines.some(l=>!l.qcAt))throw new DomainError('Còn dòng chưa nhận/QC hoặc thiếu kết luận.');
- let bound=r.lines.reduce((sum,l)=>sum+l.refundQuantity*Number(l.shipmentLine.orderLine.priceSnapshot),0);
+ let bound=caseEntitlement(r);
  const allMoney=await tx.moneyTransaction.findMany({where:{orderId}});
  const collected=allMoney.filter(t=>t.kind==='THU'&&t.status==='THANH_CONG').reduce((sum,t)=>sum+Number(t.amount),0);
  const refunded=causeAmount(allMoney,'HOAN',t=>t.reason==='HOAN_RMA'&&t.returnId===id);
@@ -86,10 +86,12 @@ async function closeCase(tx:Tx,id:string,reason:string,actorId:string,at:Date){
 /** After QC: refund what is still owed through the simulated payment gateway, then close if nothing is pending. */
 async function settle(tx:Tx,id:string,actorId:string,key:string,at:Date){
  const r=await tx.returnCase.findUniqueOrThrow({where:{id}});if(r.status!=='CHO_HOAN_TIEN')return {refunded:0,closed:false};
- const o=await tx.order.findUniqueOrThrow({where:{id:r.orderId},include:{transactions:true,shipments:{select:{id:true,codAmount:true}},returns:{include:{lines:{include:{shipmentLine:{include:{orderLine:true}}}}}}}});
+ const o=await tx.order.findUniqueOrThrow({where:{id:r.orderId},include:{shopPurchase:true,transactions:true,shipments:{select:{id:true,codAmount:true}},returns:{include:{lines:{include:{shipmentLine:{include:{orderLine:true}}}}}}}});
  const target=o.returns.find(x=>x.id===id)!;
  const amount=causeHasPending(o.transactions,t=>t.returnId===id)?0:returnRefundCapacity(target,o.paymentMethod,o.transactions,o.returns,o.shipments);
- if(amount>0)await tx.moneyTransaction.create({data:{orderId:o.id,returnId:id,kind:'HOAN',reason:'HOAN_RMA',note:o.channel==='SHOPVUI'?'Hoàn tự động về Ví ShopVuiPay của khách sau kiểm định (mô phỏng)':'Hoàn tự động qua cổng thanh toán (mô phỏng) sau kiểm định',amount,source:'CHUYEN_KHOAN',reference:'HT-'+(r.code??id),status:'THANH_CONG',idempotencyKey:key+':refund',recordedById:actorId,approvedById:actorId,confirmedAt:at}});
+ // A real bank refund is never executed by SePay's incoming-transfer poller or this simulated gateway.
+ if(amount>0&&(o.shopPurchase?.payment==='bank'||o.transactions.some(t=>t.reference.startsWith('SEPAY-'))))return {refunded:0,closed:false};
+ if(amount>0)await tx.moneyTransaction.create({data:{orderId:o.id,returnId:id,kind:'HOAN',reason:'HOAN_RMA',note:o.transactions.some(t=>t.source==='VI_MO_PHONG')?'Hoàn tự động về Ví ShopVuiPay của khách sau kiểm định (mô phỏng)':'Chứng từ hoàn mô phỏng sau kiểm định; không thực hiện chuyển tiền ngân hàng',amount,source:o.transactions.some(t=>t.source==='VI_MO_PHONG')?'VI_MO_PHONG':'CHUYEN_KHOAN',reference:'HT-'+(r.code??id),status:'THANH_CONG',idempotencyKey:key+':refund',recordedById:actorId,approvedById:actorId,confirmedAt:at}});
  try{await closeCase(tx,id,'Tự đóng: hàng đã kiểm định, tiền đã hoàn/miễn thu đúng hạn mức',actorId,at);return {refunded:amount,closed:true};}
  catch(e){if(e instanceof DomainError)return {refunded:amount,closed:false};throw e;}
 }

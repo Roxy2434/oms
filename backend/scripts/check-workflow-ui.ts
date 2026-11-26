@@ -1,7 +1,7 @@
 // E2E for the role-based screens: /fulfillment batches and receiving returns from the returns list. Isolated server 3002 + oms_test.
 import 'dotenv/config';
 import {spawn,type ChildProcess} from 'node:child_process';import {createServer} from 'node:net';import {setTimeout as delay} from 'node:timers/promises';import {randomUUID} from 'node:crypto';import {mkdir} from 'node:fs/promises';import {SignJWT} from 'jose';import {chromium,expect} from '@playwright/test';import AxeBuilder from '@axe-core/playwright';import assert from 'node:assert/strict';import {settle} from './helpers/motion';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');
 const origin='http://127.0.0.1:3002',ns='wfui-'+randomUUID().slice(0,8),dir='artifacts/qa/workflow';let server:ChildProcess|undefined;const b=await chromium.launch({channel:'msedge',headless:true});
 try{

@@ -1,5 +1,21 @@
 # ShopVui – Website mô phỏng sàn thương mại điện tử
 
+## Web demo công khai
+
+Profile VPS mới: `../docs/public-deploy.md`. Khách tự đăng ký qua Turnstile, COD/ví mô phỏng, riêng SePay chuyển tiền thật khi người vận hành bật và cấu hình. Trang checkout và QR cảnh báo rõ, không giao hàng thật/không hoàn tiền bank vào ví giả. Bản local bên dưới vẫn tắt SePay.
+
+## Bộ demo lặp lại — 26/11/2026
+
+Mở `http://127.0.0.1:8000/#/shop/oms`. 10 sản phẩm EZMART giảm đúng 50%, ảnh chụp local kèm `assets/images/ezmart/credits.html`; cache sửa giá/ảnh cũ không ghi đè danh mục. Bản hiện tại bật **OMS_DEMO_MODE=1**, chỉ thanh toán ví/COD mô phỏng và không có QR ngân hàng thật. Tài khoản của lượt hiện hành và 17 link bài DOM/RMA: `../backend/storage/demo/LUOT-HIEN-TAI.md`. Chuẩn bị lượt mới tại backend bằng `npm run demo:refresh`; nút khôi phục trong web chỉ xóa cache trình duyệt. Xem `../docs/demo-repeatable.md` và `../docs/deployment-readiness-20261126.md`. Các khả năng SePay tiền thật bên dưới chỉ áp dụng khi tắt demo mode sau khi được duyệt riêng.
+
+## Bản hiện hành — 25/11/2026
+
+Tài khoản, ví mô phỏng và đơn EZMART đã lưu trên máy chủ, **không còn đăng nhập bằng tài khoản LocalStorage `demo`**. Chạy backend + frontend theo README ở thư mục gốc rồi bấm **Đăng Ký**. Mỗi tài khoản mới nhận 6.000.000đ mô phỏng một lần, đăng nhập máy khác vẫn giữ ví/đơn. Các shop mẫu khác chỉ để xem; chỉ EZMART nhận đơn.
+
+Chuyển khoản dùng **SePay tiền thật**, không có nút tự xác nhận demo. Nếu chưa cấu hình SePay, dùng ví mô phỏng hoặc COD. Tiền hoàn ngân hàng không được cộng thành số dư ví mô phỏng. Xem `../docs/shopvui-server-accounts.md`.
+
+**Các phần bên dưới mô tả bản demo cũ**, không dùng hướng dẫn mở file trực tiếp, tài khoản demo hoặc LocalStorage làm mô tả đăng ký/thanh toán hiện hành.
+
 Website demo **lấy cảm hứng từ giao diện và luồng mua sắm của các sàn TMĐT phổ biến tại Việt Nam (như Shopee)**, làm tư liệu cho tiểu luận phân tích.
 Tên thương hiệu, logo, shop, đơn hàng… đều là **giả lập**; website không liên kết với doanh nghiệp nào và không có giao dịch thật.
 

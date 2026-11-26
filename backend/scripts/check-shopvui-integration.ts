@@ -4,10 +4,11 @@ import 'dotenv/config';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 const url=new URL(process.env.DATABASE_URL!);
-assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');
 const sv=await import('../src/domain/integrations/shopvui');
 const {shipmentBatch}=await import('../src/domain/orders/batch');
+const {recordTransfer,payCode}=await import('../src/domain/payments/sepay');
 const ref=(orderId:string)=>({orderId,token:sv.orderToken(orderId)});
 const ns='sv-'+randomUUID().slice(0,8),key=()=>randomUUID();
 const dh=(tag:string)=>'DH-'+new Date(Date.now()+7*3600000).toISOString().slice(2,10).replaceAll('-','')+'-'+createHash('sha256').update(ns+tag).digest('hex').slice(0,6).toUpperCase();// ShopVui order code = OMS order id (DH-YYMMDD-XXXXXX)
@@ -45,9 +46,12 @@ try{
  const rc=await db.returnCase.findFirstOrThrow({where:{orderId:o1.orderId},include:{lines:true}});
  await returnCommand(actor.id,key(),rc.id,{action:'inspect',lineId:rc.lines[0].id,received:2,passed:2,failed:0,refundQuantity:2,reason:'Nguyên seal',autoSettle:true});
  const closed=await rmaOf();assert.equal(closed.stage,'closed');assert.equal(closed.refunded,200000);
- // Bank transfer: prepaid, unpaid until ShopVui reports the payment; then exactly the due amount is recorded once.
+ // Bank transfer: browser self-confirmation is forbidden; only a trusted SePay transaction settles it, once.
  const o2=await sv.placeOrder({...body,orderId:dh('-o2'),items:[{sku:ns+'x',qty:1}],payment:'bank'});
- const p1=await sv.pay(ref(dh('-o2')));const p2=await sv.pay(ref(dh('-o2')));assert(p1.paid>0);assert.equal(p2.paid,0);
+ await assert.rejects(sv.pay(ref(dh('-o2'))),/SePay/);
+ const bankOrder=await db.order.findUniqueOrThrow({where:{id:o2.orderId},include:{lines:true}}),bankAmount=bankOrder.lines.reduce((n,l)=>n+Number(l.priceSnapshot)*l.quantity,0)+Number(bankOrder.shippingFee);
+ const transfer={id:ns+'-bank',amount:bankAmount,content:payCode(o2.orderId),reference:ns+'-bank'};
+ await recordTransfer(transfer);await recordTransfer(transfer);
  const receipts=await db.moneyTransaction.findMany({where:{orderId:o2.orderId,kind:'THU',status:'THANH_CONG'}});assert.equal(receipts.length,1);assert.equal(Number(receipts[0].amount),100000+Number((await db.order.findUniqueOrThrow({where:{id:o2.orderId}})).shippingFee));
  // Buyer cancels before handover: OMS cancels and releases the hold; status maps to CANCELLED.
  await sv.cancel({...ref(dh('-o2')),reason:'Khách đổi ý'});assert.equal((await sv.statuses([ref(dh('-o2'))])).orders[0].status,'CANCELLED');

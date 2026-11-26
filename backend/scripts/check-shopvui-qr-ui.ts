@@ -2,8 +2,9 @@
 // QR modal waits, then turns into "Thanh toán thành công" in place; a payment arriving after the modal was closed shows
 // its own success notice. Isolated OMS on 3002 + oms_test, storefront on 8001; the QR image and SePay are never called.
 import 'dotenv/config';
+import {setupShopBuyer} from './helpers/shop-buyer';
 import {spawn,type ChildProcess} from 'node:child_process';import {createServer as netServer} from 'node:net';import {createServer,type Server} from 'node:http';import {readFile,mkdir} from 'node:fs/promises';import {join,extname,normalize} from 'node:path';import {setTimeout as delay} from 'node:timers/promises';import {randomUUID} from 'node:crypto';import {chromium,expect,type Page} from '@playwright/test';import assert from 'node:assert/strict';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');
 const {recordTransfer,payCode}=await import('../src/domain/payments/sepay');
 const {expireUnpaidTransfers,PAY_MINUTES}=await import('../src/domain/integrations/shopvui');
@@ -25,7 +26,7 @@ try{
  await c.addInitScript(`window.SV_OMS={base:'${oms}/api/integrations/shopvui',key:'shopvui-local-demo',shopId:'oms'}`);
  await c.route('https://vietqr.app/**',r=>r.fulfill({contentType:'image/svg+xml',body:fakeQr}));
  const p=await c.newPage();const errors:string[]=[];p.on('pageerror',e=>errors.push(e.message));
- await p.goto(shop+'/#/login');await p.locator('input[name=account]').fill('demo');await p.locator('input[type=password]').first().fill('Demo1234');await p.getByRole('button',{name:'ĐĂNG NHẬP',exact:true}).click();await expect(p).not.toHaveURL(/#\/login/);
+ const buyer=await setupShopBuyer(c,oms,shop,ns);await p.goto(shop+'/#/login');await p.locator('input[name=account]').fill(buyer.username);await p.locator('input[type=password]').first().fill(buyer.password);await p.getByRole('button',{name:'ĐĂNG NHẬP',exact:true}).click();await expect(p).not.toHaveURL(/#\/login/);
  async function buyByBank(page:Page){
   await page.goto(shop+'/#/product/oms-HT-1200');await expect(page.getByText(/sản phẩm có sẵn/)).toContainText(/\d/);
   await page.getByRole('button',{name:'Mua Ngay'}).click();await expect(page).toHaveURL(/#\/checkout/);// Mua Ngay skips the cart
@@ -78,11 +79,12 @@ try{
  const later=new Date(third.order.confirmedAt!.getTime()+(PAY_MINUTES+1)*60000);let gone=false;for(let i=0;i<20&&!gone;i++){const r=await expireUnpaidTransfers(later);gone=r.expired.includes(third.order.id);if(!r.expired.length)break;}assert(gone,'unpaid order must expire');
  await expect(p.locator('.pay-cancelled')).toContainText('Đơn hàng đã bị hủy',{timeout:10000});await expect(p.locator('.pay-cancelled')).toContainText('quá hạn thanh toán');
  await p.waitForTimeout(400);await p.screenshot({path:dir+'/payment-expired.png'});
- // 4) Presentation: "Đã thanh toán (demo)" turns the QR page into the payment success page without a real transfer.
- const fourth=await buyByBank(p);const demoBtn=fourth.card.getByRole('button',{name:'Đã thanh toán (demo)'});await expect(demoBtn).toBeVisible();
- await p.waitForTimeout(300);await p.screenshot({path:dir+'/payment-demo-button.png'});
- await demoBtn.click();await expect(p.locator('.pay-success')).toContainText('Thanh toán thành công',{timeout:10000});
- const demoMoney=await db.moneyTransaction.findMany({where:{orderId:fourth.order.id}});assert.equal(demoMoney.length,1);assert(demoMoney[0].reference.startsWith('DEMO-'),demoMoney[0].reference);
+ // 4) A stale demo switch must not expose a self-confirm button or an API payment bypass.
+ const fourth=await buyByBank(p);await expect(fourth.card.locator('[data-demo-pay]')).toHaveCount(0);
+ const denied=await c.request.post(oms+'/api/integrations/shopvui/pay',{headers:{Origin:shop,'X-ShopVui-Key':'shopvui-local-demo'},data:{orderId:fourth.order.id,token:await tokenOf(fourth.order.id)}});assert.equal(denied.status(),403);
+ assert.equal(await db.moneyTransaction.count({where:{orderId:fourth.order.id}}),0);
+ await bank(fourth.order,Number(fourth.order.shippingFee)+fourth.order.lines.reduce((n,l)=>n+Number(l.priceSnapshot)*l.quantity,0));
+ await expect(p.locator('.pay-success')).toContainText('Thanh toán thành công',{timeout:10000});
  assert.deepEqual(errors,[]);
  console.log(JSON.stringify({result:'PASS',orders:[order.id,second.order.id],inPlaceMs,noticeMs,screens:dir,scope:'ShopVui QR -> bank transfer recorded -> success screen; oms_test only'}));
 }finally{server?.kill();files?.close();await b.close();await db.$disconnect();}

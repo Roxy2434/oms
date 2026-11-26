@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {moneyPosition,returnDeductions,returnRefundCapacity,codRefundPool,type Money} from '../../src/domain/payments/balances';
+import {caseEntitlement,moneyPosition,returnDeductions,returnRefundCapacity,codRefundPool,type Money} from '../../src/domain/payments/balances';
 const line=(price:number)=>({refundQuantity:1,shipmentLine:{shipmentId:'S',orderLine:{priceSnapshot:price}}});
 const tx=(id:string,kind:string,reason:string,amount:number,extra:Partial<Money>={}):Money=>({id,kind,reason,amount,status:'THANH_CONG',...extra});
 const parcels=[{id:'S',codAmount:100000}];
@@ -7,6 +7,13 @@ it('prepaid sender-return refund lowers the obligation, so nothing is left to co
  const r={id:'R',status:'DA_DONG',kind:'CHUYEN_HOAN',waivedAmount:0,lines:[line(100000)]};
  const total=Math.max(0,130000-returnDeductions([r])),b=moneyPosition([tx('a','THU','THU_TRA_TRUOC',130000),tx('b','HOAN','HOAN_RMA',100000,{returnId:'R'})]);
  expect(total-(b.net+b.pendingCollect)).toBe(0);
+});
+it('prepaid sender-return with 3PL carrier loss refunds both received and carrier-lost units',()=>{
+ const r={id:'R',status:'CHO_HOAN_TIEN',kind:'CHUYEN_HOAN',waivedAmount:0,lines:[{approved:2,received:1,refundQuantity:1,qcAt:'2026-11-26T00:00:00Z',shipmentLine:{shipmentId:'S',orderLine:{priceSnapshot:100000}}}]};
+ const rows=[tx('a','THU','THU_TRA_TRUOC',230000)];
+ expect(caseEntitlement(r)).toBe(200000);
+ expect(returnRefundCapacity(r,'TRA_TRUOC',rows,[r],[])).toBe(200000);
+ expect(returnDeductions([r])).toBe(200000);
 });
 it('waived COD sender-return is deducted once, not again by its refund lines',()=>{
  expect(returnDeductions([{status:'DA_DONG',kind:'CHUYEN_HOAN',waivedAmount:100000,lines:[line(100000)]}])).toBe(100000);

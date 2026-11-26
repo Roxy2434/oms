@@ -1,0 +1,128 @@
+name: oms-public
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+services:
+  db:
+    image: postgres:17-alpine@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: oms
+      POSTGRES_USER: oms_owner
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD:?Run deploy/init-env.py}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Run deploy/init-env.py}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db-init.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U oms_owner -d oms"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: *logging
+    mem_limit: 512m
+  backend:
+    build: {context: ../backend}
+    restart: unless-stopped
+    init: true
+    depends_on: {db: {condition: service_healthy}}
+    environment:
+      DATABASE_URL: postgresql://oms_app:${APP_DB_PASSWORD:?Required}@db:5432/oms
+      SESSION_SECRET: ${SESSION_SECRET:?Required}
+      BOOTSTRAP_PASSWORD: ${BOOTSTRAP_PASSWORD:?Required}
+      APP_ORIGIN: https://${DOMAIN:?Required}
+      SHOPVUI_ORIGIN: https://${DOMAIN:?Required}
+      OMS_PUBLIC_DEPLOYMENT: "1"
+      OMS_DEMO_MODE: "1"
+      OMS_CLASSROOM_MODE: "${OMS_CLASSROOM_MODE:-1}"
+      OMS_DISABLE_CAPTCHA: "${OMS_DISABLE_CAPTCHA:-0}"
+      OMS_DEMO_REAL_BANK: ${OMS_DEMO_REAL_BANK:-0}
+      TURNSTILE_SITEKEY: "${TURNSTILE_SITEKEY:-}"
+      TURNSTILE_SECRET_KEY: "${TURNSTILE_SECRET_KEY:-}"
+      SEPAY_API_TOKEN: ${SEPAY_API_TOKEN:-}
+      SEPAY_ACCOUNT: ${SEPAY_ACCOUNT:-}
+      SEPAY_BANK: ${SEPAY_BANK:-970422}
+      SEPAY_HOLDER: ${SEPAY_HOLDER:-}
+      SEPAY_REFUND_CONTACT: ${SEPAY_REFUND_CONTACT:-}
+      SEPAY_START_ID: ${SEPAY_START_ID:-}
+      SEPAY_POLL: "on"
+    volumes: [app_storage:/app/storage]
+    read_only: true
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=1777
+      - /app/.next/cache:uid=1000,gid=1000,mode=0700
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    logging: *logging
+    mem_limit: 1g
+  edge:
+    build: {context: .., dockerfile: deploy/edge.Dockerfile}
+    restart: unless-stopped
+    depends_on: {backend: {condition: service_healthy}}
+    environment:
+      DOMAIN: ${DOMAIN:?Required}
+      ACME_EMAIL: ${ACME_EMAIL:?Required}
+      STAFF_EDGE_USER: ${STAFF_EDGE_USER:?Required}
+      STAFF_EDGE_HASH: ${STAFF_EDGE_HASH:?Required}
+    ports: ["80:80", "443:443"]
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:2020/healthz]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes: [tls_data:/data, tls_config:/config]
+    read_only: true
+    tmpfs: [/tmp]
+    sysctls: {net.ipv4.ip_unprivileged_port_start: "0"}
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    mem_limit: 128m
+  backup:
+    build: {context: .., dockerfile: deploy/ops.Dockerfile}
+    restart: unless-stopped
+    depends_on: {backend: {condition: service_healthy}}
+    environment:
+      PGHOST: db
+      PGUSER: oms_app
+      PGDATABASE: oms
+      PGPASSWORD: ${APP_DB_PASSWORD:?Required}
+      OPS_ALERT_URL: ${OPS_ALERT_URL:-}
+    volumes: [backups:/backups]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD-SHELL, "test -f /backups/last-success && test -z \"$$(find /backups/last-success -mmin +420 -print)\""]
+      interval: 60s
+      retries: 3
+      start_period: 120s
+    logging: *logging
+    mem_limit: 128m
+  monitor:
+    build: {context: .., dockerfile: deploy/ops.Dockerfile}
+    restart: unless-stopped
+    depends_on: {backup: {condition: service_started}}
+    command: [/opt/monitor.sh]
+    environment: {OPS_ALERT_URL: "${OPS_ALERT_URL:-}"}
+    volumes: [backups:/backups:ro]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    mem_limit: 64m
+volumes:
+  db_data:
+  app_storage:
+  tls_data:
+  tls_config:
+  backups:

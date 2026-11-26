@@ -110,15 +110,14 @@
       ['Flash Sale là gì?', 'Sản phẩm được bán với giá đặc biệt trong khung giờ 0h, 9h, 12h, 15h, 18h, 21h với số lượng suất giới hạn.'],
     ]],
     ['Thanh toán', [
-      ['Có những phương thức thanh toán nào?', 'Thanh toán khi nhận hàng (COD), Ví ShopVuiPay (trừ tiền ngay) và Chuyển khoản ngân hàng (đơn ở trạng thái Chờ thanh toán cho đến khi xác nhận). Trong bản demo, mọi giao dịch đều là mô phỏng.'],
+      ['Có những phương thức thanh toán nào?', 'Thanh toán khi nhận hàng (COD), Ví ShopVuiPay (trừ tiền tức thì từ số dư ví) và Chuyển khoản ngân hàng qua VietQR (hệ thống tự động xác nhận ngay khi nhận được thanh toán).'],
     ]],
     ['Đơn hàng & Vận chuyển', [
-      ['Các trạng thái của đơn hàng?', 'Chờ thanh toán → Chờ xác nhận → Chờ lấy hàng → Đang giao → Hoàn thành. Đơn có thể bị hủy khi chưa giao cho đơn vị vận chuyển; sau khi hoàn thành có thể yêu cầu Trả hàng/Hoàn tiền trong 15 ngày.'],
-      ['Phí vận chuyển được tính thế nào?', 'Cùng tỉnh: ₫15.000 · Cùng miền: ₫22.000 · Khác miền: ₫32.000 · Hàng quốc tế: ₫45.000 (+₫2.000 cho mỗi sản phẩm thêm). Hỏa Tốc 2 giờ (₫45.000) chỉ áp dụng khi shop và người mua cùng tỉnh.'],
+      ['Các trạng thái của đơn hàng?', 'Chờ thanh toán → Chờ xác nhận → Chờ lấy hàng → Đang giao → Hoàn thành. Đơn có thể hủy khi chưa bàn giao cho đơn vị vận chuyển; sau khi nhận hàng có thể gửi yêu cầu Trả hàng/Hoàn tiền theo chính sách đổi trả của từng gian hàng.'],
+      ['Phí vận chuyển được tính thế nào?', 'Phí vận chuyển được tính tự động theo khu vực nhận hàng, khối lượng kiện hàng và kho xuất hàng tối ưu nhằm đảm bảo thời gian giao nhanh nhất.'],
     ]],
-    ['Về bản demo này', [
-      ['ShopVui có phải sàn thương mại điện tử thật không?', 'Không. Đây là website mô phỏng phục vụ tiểu luận/học tập. Dữ liệu lưu trong LocalStorage của trình duyệt, không có máy chủ, không thanh toán thật.'],
-      ['Tài khoản để thử?', 'Tên đăng nhập: demo · Mật khẩu: Demo1234. Bạn cũng có thể tự đăng ký tài khoản mới. Bấm "Khôi phục dữ liệu mẫu" ở chân trang để làm lại từ đầu.'],
+    ['Trả hàng & Hoàn tiền', [
+      ['Quy trình trả hàng và hoàn tiền như thế nào?', 'Tại mục Đơn Mua → Hoàn thành, bấm "Trả Hàng/Hoàn Tiền", chọn sản phẩm, lý do và đính kèm hình ảnh thực tế. Sau khi kho tiếp nhận và kiểm định chất lượng sản phẩm hoàn về, tiền hàng hợp lệ sẽ được hoàn trả tự động về Ví ShopVuiPay hoặc đối soát chuyển khoản.'],
     ]],
   ];
   SV.pages.help = {

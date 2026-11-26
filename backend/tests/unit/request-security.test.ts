@@ -1,8 +1,16 @@
-import {it,expect} from 'vitest';
-import {RateLimiter,readJsonLimited} from '../../src/server/request-security';
+import {it,expect,vi,afterEach} from 'vitest';
+import {RateLimiter,readJsonLimited,allowedAppOrigins,allowedShopOrigins} from '../../src/server/request-security';
 import {canTransitionClaim} from '../../src/domain/returns/claims';
 import {assertShipmentSla} from '../../src/domain/allocation/sla';
 import {ROUTING_POLICY} from '../../src/domain/allocation/routing';
+afterEach(()=>vi.unstubAllEnvs());
+it('automatically trusts Vercel HTTPS deployment origins while rejecting foreign origins',()=>{
+ vi.stubEnv('VERCEL','1');vi.stubEnv('VERCEL_PROJECT_PRODUCTION_URL','ezmart-oms.vercel.app');vi.stubEnv('VERCEL_URL','ezmart-oms-abc123.vercel.app');
+ expect(allowedAppOrigins().has('https://ezmart-oms.vercel.app')).toBe(true);
+ expect(allowedAppOrigins().has('https://ezmart-oms-abc123.vercel.app')).toBe(true);
+ expect(allowedShopOrigins().has('https://ezmart-oms.vercel.app')).toBe(true);
+ expect(allowedAppOrigins().has('https://evil.vercel.app')).toBe(false);
+});
 it('rate limits use fixed windows and do not slide forever',()=>{const r=new RateLimiter();expect(r.take('x',2,100,0)).toBe(true);expect(r.take('x',2,100,30)).toBe(true);expect(r.take('x',2,100,90)).toBe(false);expect(r.take('x',2,100,101)).toBe(true);});
 it('bounded limiter cannot be bypassed by filling it with arbitrary keys',()=>{const r=new RateLimiter(2);expect(r.take('a',1,100,0)).toBe(true);expect(r.take('b',1,100,0)).toBe(true);expect(r.take('c',1,100,0)).toBe(false);expect(r.take('a',1,100,0)).toBe(false);expect(r.take('c',1,100,101)).toBe(true);});
 it('rejects oversized declared bodies and oversized streamed bodies without Content-Length',async()=>{

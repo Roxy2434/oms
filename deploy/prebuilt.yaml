@@ -1,0 +1,14 @@
+# Use after docker load; built and tested Linux/amd64 images, no build toolchain needed on VPS.
+services:
+  backend:
+    image: oms-public-backend:20261126
+    build: !reset null
+  edge:
+    image: oms-public-edge:20261126
+    build: !reset null
+  backup:
+    image: oms-public-ops:20261126
+    build: !reset null
+  monitor:
+    image: oms-public-ops:20261126
+    build: !reset null

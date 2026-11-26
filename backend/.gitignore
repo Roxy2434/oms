@@ -9,3 +9,5 @@ playwright-report/
 test-results/
 src/generated/
 __pycache__/
+public/shopvui.html
+public/assets/

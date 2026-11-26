@@ -3,7 +3,7 @@
 // transfer exactly as the SePay poller would. Output: artifacts/qa/demo/shopvui-dat-hang-thanh-toan.mp4 (+ .webm).
 import 'dotenv/config';
 import {spawn,spawnSync,type ChildProcess} from 'node:child_process';import {createServer as netServer} from 'node:net';import {createServer,type Server} from 'node:http';import {readFile,mkdir,rename,rm} from 'node:fs/promises';import {join,extname,normalize} from 'node:path';import {setTimeout as delay} from 'node:timers/promises';import {randomUUID} from 'node:crypto';import {chromium,expect} from '@playwright/test';import assert from 'node:assert/strict';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');
 const {recordTransfer,payCode}=await import('../src/domain/payments/sepay');
 const oms='http://127.0.0.1:3002',shop='http://127.0.0.1:8001',ns='demo-'+randomUUID().slice(0,8),dir='artifacts/qa/demo',name='shopvui-dat-hang-thanh-toan';

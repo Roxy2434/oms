@@ -9,7 +9,7 @@ import {mkdir} from 'node:fs/promises';
 import {SignJWT} from 'jose';
 import {chromium,expect} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');
 const origin='http://127.0.0.1:3002',ns='domui-'+randomUUID().slice(0,8),dir='artifacts/qa/dom-hardening';
 let server:ChildProcess|undefined;const browser=await chromium.launch({channel:'msedge',headless:true});
@@ -41,7 +41,7 @@ try{
  const staffContext=await browser.newContext();await staffContext.addCookies([{name:'oms_session',value:await sign(staff.id),url:origin}]);
  const denied=await staffContext.request.post(origin+'/api/foundation/catalog',{headers:{Origin:origin,'Idempotency-Key':randomUUID()},data:{kind:'warehouse',id:ns+'near',name:'Not allowed',address:'Test',region:'HN',active:true}});assert.equal(denied.status(),403);await staffContext.close();
  const blocked=await context.request.post(origin+'/api/integrations/shopvui/orders',{headers:{Origin:'https://not-allowed.invalid','X-ShopVui-Key':'shopvui-local-demo'},data:{}});assert.equal(blocked.status(),403);
- for(let i=0;i<31;i++){const response=await context.request.post(origin+'/api/integrations/shopvui/orders',{headers:{Origin:'http://127.0.0.1:8001','X-ShopVui-Key':'shopvui-local-demo'},data:{}});assert.equal(response.status(),i<30?422:429);}
+ for(let i=0;i<31;i++){const response=await context.request.post(origin+'/api/integrations/shopvui/orders',{headers:{Origin:'http://127.0.0.1:8001','X-ShopVui-Key':'shopvui-local-demo'},data:{}});assert.equal(response.status(),i<30?401:429);}
  assert.equal(errors.length,0,errors.join('\n'));await context.close();
  console.log('PASS browser regional DOM (no coordinate inputs), cost/ETA, 1366+390 axe/overflow, delayed SLA blocks stock issue, HTTP role/origin/body/quota/security headers; oms_test only');
 }finally{if(server&&server.exitCode===null){server.kill();await Promise.race([new Promise<void>(r=>server!.once('exit',()=>r())),delay(5000)]);}await browser.close();await db.$disconnect();}

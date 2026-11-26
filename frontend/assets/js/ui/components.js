@@ -280,13 +280,13 @@
     return o;
   };
   ui.fieldError = (root, field, msg) => {
-    root.querySelectorAll('.err').forEach((el) => el.classList.remove('err'));
+    root.querySelectorAll('.err').forEach((el) => { el.classList.remove('err'); el.removeAttribute('aria-invalid'); el.removeAttribute('aria-describedby'); });
     root.querySelectorAll('.msg').forEach((el) => (el.textContent = ''));
     const el = field && root.querySelector(`[name="${field}"]`);
     if (el) {
-      el.classList.add('err');
+      el.classList.add('err'); el.setAttribute('aria-invalid', 'true');
       const m = el.closest('.fld') && el.closest('.fld').querySelector('.msg');
-      if (m) m.textContent = msg;
+      if (m) { m.textContent = msg; m.id = m.id || 'field-error-' + crypto.randomUUID(); m.setAttribute('role', 'alert'); el.setAttribute('aria-describedby', m.id); }
       el.focus();
     } else if (msg) ui.toast(msg, 'error');
   };
@@ -309,20 +309,20 @@
       body: `<div class="form-grid">
         <div class="fld"><input class="input" name="name" placeholder="Họ và tên" value="${v('name')}"><div class="msg"></div></div>
         <div class="fld"><input class="input" name="phone" placeholder="Số điện thoại" value="${v('phone')}"><div class="msg"></div></div>
-        <div class="fld full"><select class="input" name="province"><option value="">Tỉnh/Thành phố</option>${SV.const.PROVINCES.map((p) => `<option ${p === a.province ? 'selected' : ''}>${p}</option>`).join('')}</select><div class="msg"></div></div>
+        <div class="fld full"><select class="input" name="province"><option value="">Tỉnh/Thành phố</option>${['Hà Nội', 'Đà Nẵng', 'TP. Hồ Chí Minh'].map((p) => `<option ${p === a.province ? 'selected' : ''}>${p}</option>`).join('')}</select><div class="msg"></div></div>
         <div class="fld full"><input class="input" name="ward" placeholder="Phường/Xã" value="${v('ward')}"><div class="msg"></div></div>
         <div class="fld full"><input class="input" name="detail" placeholder="Địa chỉ cụ thể (số nhà, tên đường…)" value="${v('detail')}"><div class="msg"></div></div>
         <div class="fld full"><div class="lbl-sm">Loại địa chỉ:</div><div class="seg">
           <label><input type="radio" name="type" value="home" ${a.type !== 'office' ? 'checked' : ''}><span>Nhà Riêng</span></label>
           <label><input type="radio" name="type" value="office" ${a.type === 'office' ? 'checked' : ''}><span>Văn Phòng</span></label></div></div>
         <label class="check full"><input type="checkbox" name="isDefault" ${a.isDefault ? 'checked disabled' : ''}> Đặt làm địa chỉ mặc định</label>
-        <p class="note full">Địa chỉ theo đơn vị hành chính 2 cấp (Tỉnh/Thành phố – Phường/Xã) áp dụng từ 01/07/2025.</p>
+        <p class="note full">EZMART hiện hỗ trợ giao tại Hà Nội, Đà Nẵng và TP. Hồ Chí Minh.</p>
       </div>`,
-      onOk(m) {
+      async onOk(m) {
         const data = ui.formData(m);
         data.id = a.id;
         if (a.isDefault) data.isDefault = true;
-        const r = SV.address.save(data);
+        const r = await SV.address.save(data);
         if (!r.ok) {
           ui.fieldError(m, r.field, r.error);
           return false;

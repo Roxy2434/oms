@@ -57,7 +57,7 @@
 
   /* ---------------- Đơn hàng: nút thao tác theo trạng thái ---------------- */
   function orderActions(o, detail) {
-    const sellerLink = (tab, text) => (o.oms ? ' · Kho EZMART đang xử lý, trạng thái tự cập nhật' : ` · Mẹo demo: ${text} ở <a class="link" href="#/seller/orders?tab=${tab}&shop=${o.shopId}">Kênh Người Bán</a>`);
+    const sellerLink = () => (o.oms ? ' · Kho EZMART đang xử lý, trạng thái tự cập nhật' : '');
     const b = (act, text, primary) => `<button type="button" class="btn ${primary ? 'btn-primary' : ''}" data-oact="${act}" data-id="${o.id}">${text}</button>`;
     const contact = b('chat', 'Liên Hệ Người Bán');
     switch (o.status) {
@@ -115,7 +115,7 @@
     if (act === 'chat') return SV.openChat(o.shopId);
     if (act === 'pay') {
       if (SV.oms.hasQr(o)) return SV.go('/payment/' + o.id);
-      const ok = await ui.modal({ title: 'Thanh toán chuyển khoản (mô phỏng)', width: 460, okText: 'Tôi đã thanh toán', cancelText: 'Để sau', body: `<div class="pay-sim"><div class="pay-amt">${U.money(o.amounts.total)}</div><p>Đơn hàng <b>${o.code}</b></p><p class="note">Bản demo không có tài khoản ngân hàng thật. Bấm "Tôi đã thanh toán" để mô phỏng giao dịch thành công.</p></div>` });
+      const ok = await ui.modal({ title: 'Xác nhận thanh toán chuyển khoản', width: 460, okText: 'Tôi đã thanh toán', cancelText: 'Để sau', body: `<div class="pay-sim"><div class="pay-amt">${U.money(o.amounts.total)}</div><p>Đơn hàng <b>${o.code}</b></p><p class="note">Vui lòng kiểm tra đúng số tiền trước khi xác nhận đã chuyển khoản.</p></div>` });
       if (ok) {
         const pr = await O().pay(id);
         if (pr && pr.error) return ui.toast(pr.error, 'error');
@@ -262,9 +262,9 @@
           <div class="form-row"><label>Ngày sinh</label><input class="input w-auto" type="date" name="birthday" value="${U.esc(u.birthday)}"></div>
           <div class="form-row"><label></label><button class="btn btn-primary" type="submit">Lưu</button></div>
         </form><div class="profile-av">${ui.avatar(u.username, 100)}<p class="muted">Ảnh đại diện được tạo tự động<br>từ tên đăng nhập</p></div></div>`;
-      main.querySelector('[data-profile]').addEventListener('submit', (e) => {
+      main.querySelector('[data-profile]').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const r = SV.auth.updateProfile(ui.formData(e.target));
+        const r = await SV.auth.updateProfile(ui.formData(e.target));
         ui.toast(r.ok ? 'Cập nhật hồ sơ thành công' : r.error, r.ok ? 'success' : 'error');
       });
     },
@@ -279,12 +279,14 @@
         if (ed) (await ui.addressModal(SV.address.get(ed.dataset.edit))) && redraw();
         const del = e.target.closest('[data-del]');
         if (del && (await ui.confirm('Bạn có chắc muốn xóa địa chỉ này?', { okText: 'Xóa' }))) {
-          SV.address.remove(del.dataset.del);
+          const r = await SV.address.remove(del.dataset.del);
+          if (!r.ok) ui.toast(r.error, 'error');
           redraw();
         }
         const df = e.target.closest('[data-default]');
         if (df) {
-          SV.address.setDefault(df.dataset.default);
+          const r = await SV.address.setDefault(df.dataset.default);
+          if (!r.ok) ui.toast(r.error, 'error');
           redraw();
         }
       });
@@ -298,10 +300,10 @@
           <div class="form-row"><label></label><button class="btn btn-primary" type="submit">Xác nhận</button></div>
         </form>`;
       const f = main.querySelector('[data-pw]');
-      f.addEventListener('submit', (e) => {
+      f.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (f.new.value !== f.confirm.value) return ui.fieldError(f, 'confirm', 'Mật khẩu xác nhận không khớp');
-        const r = SV.auth.changePassword(f.old.value, f.new.value);
+        const r = await SV.auth.changePassword(f.old.value, f.new.value);
         if (!r.ok) return ui.fieldError(f, r.field, r.error);
         f.reset();
         ui.fieldError(f, null, '');
@@ -398,7 +400,7 @@
     wallet(main) {
       const list = SV.wallet.list();
       const kind = { OPEN: 'Số dư ban đầu', TOPUP: 'Nạp tiền', PAY: 'Thanh toán', REFUND: 'Hoàn tiền' };
-      main.innerHTML = `<div class="hd"><h2>Ví ShopVuiPay</h2><p>Ví mô phỏng – không dùng tiền thật. Mỗi tài khoản có sẵn ${U.money(SV.wallet.OPENING)}. Tiền hoàn của đơn hủy, trả hàng hoặc hàng chuyển hoàn được cộng tự động vào ví.</p></div>
+      main.innerHTML = `<div class="hd"><h2>Ví ShopVuiPay</h2><p>Thanh toán đơn hàng tức thì và nhận tiền hoàn tự động khi hủy đơn hoặc trả hàng hợp lệ.</p></div>
         <div class="wallet-card"><span>Số dư hiện tại</span><b data-balance>${U.money(SV.wallet.balance())}</b></div>
         <h3 class="sub-h">Lịch sử giao dịch</h3>
         ${list.length ? `<ul class="wallet-tx">${list.map((t) => `<li><div><b>${kind[t.type]}</b><span>${U.esc(t.note)}</span><small>${U.fmtDate(t.at, true)}</small></div><strong class="${t.amount > 0 ? 'in' : 'out'}">${t.amount > 0 ? '+' : '−'}${U.money(Math.abs(t.amount))}</strong>${t.orderId ? `<a class="link" href="#/user/order/${t.orderId}">Xem đơn</a>` : '<span aria-hidden="true"></span>'}</li>`).join('')}</ul>` : ui.empty('👛', 'Chưa có giao dịch nào', '')}`;

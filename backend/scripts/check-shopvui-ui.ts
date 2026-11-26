@@ -1,9 +1,10 @@
 // E2E: a buyer orders from the "OMS Gia Dụng" shop on the ShopVui storefront; the order appears in OMS (channel ShopVui),
 // the warehouse ships it, and the buyer's ShopVui order follows. Isolated OMS on 3002 + oms_test, storefront served on 8001.
 import 'dotenv/config';
+import {setupShopBuyer} from './helpers/shop-buyer';
 import {spawn,type ChildProcess} from 'node:child_process';import {createServer as netServer} from 'node:net';import {createServer,type Server} from 'node:http';import {readFile} from 'node:fs/promises';import {join,extname,normalize} from 'node:path';import {setTimeout as delay} from 'node:timers/promises';import {randomUUID} from 'node:crypto';import {mkdir} from 'node:fs/promises';import {SignJWT} from 'jose';import {chromium,expect} from '@playwright/test';import {settle} from './helpers/motion'
 import assert from 'node:assert/strict';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');
 const {shipmentBatch}=await import('../src/domain/orders/batch');
 const oms='http://127.0.0.1:3002',shop='http://127.0.0.1:8001',ns='svui-'+randomUUID().slice(0,8),dir='artifacts/qa/shopvui';
@@ -26,7 +27,7 @@ try{
  const c=await b.newContext({viewport:{width:1366,height:900}});
  await c.addInitScript(`window.SV_OMS={base:'${oms}/api/integrations/shopvui',key:'shopvui-local-demo',shopId:'oms'}`);
  const p=await c.newPage();const errors:string[]=[];p.on('pageerror',e=>errors.push(e.message));
- await p.goto(shop+'/#/login');await p.locator('input[name=account]').fill('demo');await p.locator('input[type=password]').first().fill('Demo1234');await p.getByRole('button',{name:'ĐĂNG NHẬP',exact:true}).click();await expect(p).not.toHaveURL(/#\/login/);
+ const buyer=await setupShopBuyer(c,oms,shop,ns);await p.goto(shop+'/#/login');await p.locator('input[name=account]').fill(buyer.username);await p.locator('input[type=password]').first().fill(buyer.password);await p.getByRole('button',{name:'ĐĂNG NHẬP',exact:true}).click();await expect(p).not.toHaveURL(/#\/login/);
  // Product page shows the live OMS stock, then buy now -> checkout gets the OMS-computed shipping fee.
  await p.goto(shop+'/#/product/oms-HT-1200');await expect(p.getByText(/sản phẩm có sẵn/)).toContainText(/\d/);await expect(p.locator('body')).toContainText('EZMART');
  await p.getByRole('button',{name:'Mua Ngay'}).click();await expect(p).toHaveURL(/#\/checkout/);// Mua Ngay skips the cart

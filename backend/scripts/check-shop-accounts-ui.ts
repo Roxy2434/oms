@@ -1,0 +1,56 @@
+// Real browser registration + cross-device persistence + payment security. oms_test and fake SePay ONLY.
+import 'dotenv/config';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {spawn,type ChildProcess} from 'node:child_process';
+import {createServer as netServer} from 'node:net';
+import {createServer,type Server} from 'node:http';
+import {readFile,mkdir,writeFile} from 'node:fs/promises';
+import {resolve,extname,sep} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
+import {chromium,expect} from '@playwright/test';
+import {SignJWT} from 'jose';
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const {db}=await import('../src/server/db');
+const ns='web'+randomUUID().replaceAll('-','').slice(0,12),password='QaDemo1234',origin='http://127.0.0.1:3002',shop='http://127.0.0.1:8001',dir='artifacts/qa/shop-accounts';
+const browser=await chromium.launch({channel:'msedge',headless:true});let server:ChildProcess|undefined,files:Server|undefined;
+const checks:string[]=[],errors:string[]=[];
+try{
+ await mkdir(dir,{recursive:true});
+ for(const port of [3002,8001])await new Promise<void>((ok,no)=>{const s=netServer().once('error',no).listen(port,'127.0.0.1',()=>s.close(()=>ok()));});
+ const root=resolve('..','frontend');files=createServer(async(req,res)=>{const full=resolve(root,'.'+decodeURIComponent((req.url??'/').split('?')[0]==='/'?'/index.html':(req.url??'/').split('?')[0]));if(!full.startsWith(root+sep)){res.writeHead(403).end();return;}try{res.writeHead(200,{'Content-Type':({'.js':'text/javascript','.html':'text/html','.css':'text/css'} as Record<string,string>)[extname(full)]??'application/octet-stream'}).end(await readFile(full));}catch{res.writeHead(404).end();}}).listen(8001,'127.0.0.1');
+ await db.sku.upsert({where:{id:'HT-1200'},update:{active:true},create:{id:'HT-1200',name:'Hộp thực phẩm',category:'QA',price:90000,weightGrams:300}});
+ await db.warehouse.create({data:{id:ns,name:ns,address:'QA',region:'HCM',packingFee:0}});await db.inventory.create({data:{warehouseId:ns,skuId:'HT-1200',sellable:20}});
+ server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3002'],{env:{...process.env,APP_ORIGIN:origin,SHOPVUI_ORIGIN:shop,SEPAY_API_TOKEN:'fake-test-token',SEPAY_ACCOUNT:'0123456789',SEPAY_POLL:'off',SHOPVUI_DEMO_PAY:'1'},stdio:'ignore'});
+ let ready=false;for(let n=0;n<150;n++){try{if((await fetch(origin+'/api/health')).ok){ready=true;break;}}catch{}await delay(100);}assert(ready);
+ const context=await browser.newContext({viewport:{width:1366,height:900}});await context.addInitScript(`window.SV_OMS={base:'${origin}/api/integrations/shopvui',key:'shopvui-local-demo',shopId:'oms'}`);
+ const p=await context.newPage();p.on('pageerror',e=>errors.push(e.message));
+ await p.goto(shop+'/#/register');await p.getByLabel('Tên đăng nhập',{exact:true}).fill(ns);await p.getByLabel('Email hoặc số điện thoại',{exact:true}).fill(ns+'@example.test');await p.getByLabel('Mật khẩu',{exact:true}).fill(password);await p.getByLabel('Nhập lại mật khẩu',{exact:true}).fill(password);await p.getByRole('button',{name:'ĐĂNG KÝ',exact:true}).click();await expect(p).not.toHaveURL(/#\/register/);
+ await p.goto(shop+'/#/user/wallet');await expect(p.locator('.wallet-card')).toContainText('6.000.000');await expect(p.locator('.wallet-tx li')).toHaveCount(1);checks.push('UI registration auto-login; opening grant exactly once');
+ const account=await db.shopAccount.findUniqueOrThrow({where:{username:ns}});assert((await context.cookies(origin)).find(c=>c.name==='shopvui_session')?.httpOnly);assert.equal(await p.evaluate(()=>document.cookie.includes('shopvui_session')),false);
+ await p.goto(shop+'/#/user/account/address');await p.getByRole('button',{name:'Thêm địa chỉ mới'}).click();const modal=p.getByRole('dialog');await modal.locator('[name=name]').fill('Khách đăng ký mới');await modal.locator('[name=phone]').fill('0900000001');await modal.locator('[name=province]').selectOption({label:'TP. Hồ Chí Minh'});await modal.locator('[name=ward]').fill('Phường Bến Thành');await modal.locator('[name=detail]').fill('12 Đường QA');await modal.getByRole('button',{name:'Hoàn thành'}).click();await expect(modal).toHaveCount(0);await expect(p.locator('.addr-item')).toHaveCount(1);checks.push('address saved to server via UI');
+ const device=await browser.newContext({viewport:{width:390,height:844}});await device.addInitScript(`window.SV_OMS={base:'${origin}/api/integrations/shopvui',key:'shopvui-local-demo',shopId:'oms'}`);const q=await device.newPage();q.on('pageerror',e=>errors.push(e.message));await q.goto(shop+'/#/login');await q.locator('[name=account]').fill(ns);await q.locator('[name=pw]').fill(password);await q.getByRole('button',{name:'ĐĂNG NHẬP',exact:true}).click();await expect(q).not.toHaveURL(/#\/login/);await q.goto(shop+'/#/user/account/address');await expect(q.locator('.addr-item')).toContainText('12 Đường QA');checks.push('fresh device login restores addresses and same wallet, not a second grant');
+ await p.goto(shop+'/#/product/oms-HT-1200');await expect(p.getByText(/sản phẩm có sẵn/)).toContainText(/\d/);await p.getByRole('button',{name:'Mua Ngay'}).click();await expect(p).toHaveURL(/#\/checkout/);await expect(p.locator('.co-ship')).toContainText('Giao từ kho EZMART');await p.locator('[data-pay=wallet]').click();
+ // Commit succeeded but response was lost. Same button retry must retrieve, never debit twice.
+ let dropped=false;await p.route('**/api/integrations/shopvui/orders',async route=>{if(!dropped){dropped=true;const response=await route.fetch();assert.equal(response.status(),200);await route.abort('failed');}else await route.continue();});
+ await p.locator('[data-act=place]').click();await expect(p.locator('.toast').filter({hasText:'Không kết nối'})).toBeVisible();await p.locator('[data-act=place]').click();await expect(p.getByRole('heading',{name:'Đặt hàng thành công!'})).toBeVisible();
+ const purchases=await db.shopPurchase.findMany({where:{accountId:account.id}});assert.equal(purchases.length,1);const purchase=purchases[0];assert.equal(await db.shopWalletEntry.count({where:{accountId:account.id,kind:'PAY'}}),1);const expected=6000000-purchase.charged;
+ await q.goto(shop+'/#/user/wallet');await q.reload();await expect.poll(()=>q.evaluate(()=>(window as unknown as {SV:{wallet:{balance():number}}}).SV.wallet.balance())).toBe(expected);await q.goto(shop+'/#/user/purchase');await expect(q.locator('.order a[href="#/user/order/'+purchase.orderId+'"]')).toBeVisible();checks.push('wallet checkout + lost-response replay exactly once; another device restores debit and order');
+ await q.evaluate(()=>localStorage.clear());await q.reload();await expect(q.locator('.order a[href="#/user/order/'+purchase.orderId+'"]')).toBeVisible();assert.equal(await db.shopWalletEntry.count({where:{accountId:account.id,kind:'OPEN'}}),1);checks.push('clearing localStorage does not reset server identity, wallet or orders');
+ const guest=await browser.newContext();const denied=await guest.request.post(origin+'/api/integrations/shopvui/orders',{headers:{Origin:shop,'X-ShopVui-Key':'shopvui-local-demo'},data:{payment:'wallet'}});assert.equal(denied.status(),401);
+ assert.equal((await guest.request.post(origin+'/api/storefront/register',{headers:{Origin:'https://evil.invalid'},data:{}})).status(),403);
+ const session=await guest.request.get(origin+'/api/storefront/session',{headers:{Origin:shop}});assert.deepEqual(await session.json(),{user:null});assert.equal(session.headers()['access-control-allow-credentials'],'true');assert.equal(session.headers()['cache-control'],'no-store');checks.push('guest order rejected, foreign-origin registration rejected, no unauthenticated state leak');await guest.close();
+ // Real-bank orders have no staff-side simulated collection button or API bypass either.
+ const bankId='DH-'+new Date(Date.now()+7*3600000).toISOString().slice(2,10).replaceAll('-','')+'-'+randomUUID().replaceAll('-','').slice(0,6).toUpperCase();
+ const bank=await context.request.post(origin+'/api/integrations/shopvui/orders',{headers:{Origin:shop,'X-ShopVui-Key':'shopvui-local-demo'},data:{orderId:bankId,recoveryKey:randomUUID()+randomUUID(),name:'Khách QA',phone:'0900000001',address:{province:'TP. Hồ Chí Minh',ward:'Phường Bến Thành',detail:'12 Đường QA'},items:[{sku:'HT-1200',qty:1}],payment:'bank'}});assert.equal(bank.status(),200,await bank.text());
+ const actor=await db.account.create({data:{username:'staff'+ns,name:'SePay guard QA',role:'QUAN_LY',passwordHash:'not-a-login-hash'}});
+ const staff=await browser.newContext();const staffToken=await new SignJWT({sv:1}).setProtectedHeader({alg:'HS256'}).setSubject(actor.id).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(process.env.SESSION_SECRET));await staff.addCookies([{name:'oms_session',value:staffToken,url:origin}]);
+ const sp=await staff.newPage();await sp.goto(origin+'/orders/'+bankId+'?tab=money');await expect(sp.getByRole('tabpanel')).toContainText('Khoản thu đơn này do SePay xác nhận tự động');await expect(sp.getByRole('button',{name:/^Ghi nhận thu trả trước/})).toHaveCount(0);
+ const fakeCollection=await staff.request.post(origin+'/api/orders/'+bankId+'/commands',{headers:{Origin:origin,'Idempotency-Key':randomUUID()},data:{action:'collect'}});assert.equal(fakeCollection.status(),403);assert.equal(await db.moneyTransaction.count({where:{orderId:bankId}}),0);await staff.close();checks.push('SePay order: staff UI hides simulated collection and API refuses fake collection');
+ // A second account on another device cannot see the first buyer's orders or wallet.
+ const stranger=await browser.newContext();const reg=await stranger.request.post(origin+'/api/storefront/register',{headers:{Origin:shop},data:{username:ns+'b',contact:ns+'b@example.test',password}});assert(reg.ok(),await reg.text());const strangerState=await reg.json();assert.equal(strangerState.balance,6000000);assert.equal(strangerState.orders.length,0);checks.push('second account isolated with its own one-time grant');await stranger.close();
+ await p.goto(shop+'/#/user/account/password');await p.locator('[name=old]').fill(password);await p.locator('[name=new]').fill('NextDemo1234');await p.locator('[name=confirm]').fill('NextDemo1234');await p.getByRole('button',{name:'Xác nhận',exact:true}).click();await expect(p.locator('.toast')).toContainText('Đổi mật khẩu thành công');
+ assert.deepEqual(await (await device.request.get(origin+'/api/storefront/session',{headers:{Origin:shop}})).json(),{user:null});checks.push('password change works and revokes old device sessions');
+ await p.goto(shop+'/#/user/wallet');await p.screenshot({path:dir+'/wallet-server.png',fullPage:true});assert.deepEqual(errors,[]);
+ await writeFile(dir+'/summary.json',JSON.stringify({at:new Date().toISOString(),result:'PASS',checks,errors,database:'oms_test',noRealBankCalls:true},null,2));console.log('PASS '+checks.join('; '));
+}finally{server?.kill();files?.close();await browser.close();await db.$disconnect();}

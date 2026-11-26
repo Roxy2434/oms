@@ -7,6 +7,8 @@ export async function station(p:Page,origin:string,orderId:string,link:string,bu
  await p.getByRole('tabpanel').getByRole('link',{name:link,exact:true}).first().click();
  await p.waitForURL(/\/fulfillment\?view=/);
  const s=p.getByRole('tabpanel').locator('section.batch-section');
+ // Use the actual scanner so a new fixture remains reachable beyond the oldest-first 500-row page.
+ const scanner=s.getByRole('textbox',{name:'Quét mã kiện / mã đơn / mã vận đơn'});await scanner.fill(orderId);await scanner.press('Enter');await expect(s.locator('.scan-status')).toContainText('Đã chọn');
  const rows=s.locator('tbody tr').filter({hasText:orderId});await expect(rows.first()).toBeVisible();
  const n=await rows.count();for(let i=0;i<n;i++)await rows.nth(i).getByRole('checkbox').check();
  if(reason)await s.locator('input[placeholder^="Ví dụ"]').fill(reason);

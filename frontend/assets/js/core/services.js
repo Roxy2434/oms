@@ -24,9 +24,9 @@
   const region = (prov) => (NORTH.includes(prov) ? 'N' : CENTRAL.includes(prov) ? 'C' : 'S');
 
   const PAYMENTS = [
-    { id: 'cod', label: 'Thanh toán khi nhận hàng', desc: 'Thanh toán bằng tiền mặt khi nhận hàng (COD).' },
-    { id: 'wallet', label: 'Ví ShopVuiPay', desc: 'Trừ ngay vào số dư Ví ShopVuiPay (mô phỏng – không dùng tiền thật). Tiền hoàn cũng về ví này.' },
-    { id: 'bank', label: 'Chuyển khoản ngân hàng', desc: 'Đơn hàng ở trạng thái "Chờ thanh toán" cho đến khi shop nhận được tiền chuyển khoản.' },
+    { id: 'cod', label: 'Thanh toán khi nhận hàng (COD)', desc: 'Thanh toán bằng tiền mặt cho nhân viên giao hàng khi kiểm tra và nhận kiện hàng.' },
+    { id: 'wallet', label: 'Ví ShopVuiPay', desc: 'Thanh toán tức thì từ số dư Ví ShopVuiPay. Hoàn tiền tự động về ví khi hủy đơn hoặc trả hàng.' },
+    { id: 'bank', label: 'Chuyển khoản ngân hàng (VietQR)', desc: 'Quét mã VietQR chuyển khoản nhanh 24/7. Hệ thống tự động xác nhận ngay khi nhận được thanh toán.' },
   ];
 
   const VOUCHERS = [
@@ -182,6 +182,7 @@
       if (!uid()) return { ok: false, error: 'login' };
       const p = C.get(productId);
       if (!p || p.hidden) return { ok: false, error: 'Sản phẩm không tồn tại' };
+      if (!p.omsSku) return { ok: false, error: 'Gian hàng này tạm ngừng nhận đơn mới. Mời bạn chọn sản phẩm tại EZMART Official Store.' };
       if ((p.variants || []).length && C.parseVariant(variant).length !== p.variants.length) return { ok: false, error: 'Vui lòng chọn Phân loại hàng' };
       qty = Math.max(1, parseInt(qty, 10) || 1);
       const d = db();
@@ -391,7 +392,7 @@
   const walletTx = (userId) => {
     const all = (db().walletTx = db().walletTx || []);
     if (userId && !all.some((t) => t.userId === userId && t.type === 'OPEN')) {
-      all.push({ id: SV.db.nextId('w'), userId, type: 'OPEN', amount: OPENING, note: 'Số dư có sẵn khi mở ví (mô phỏng)', at: now() });
+      all.push({ id: SV.db.nextId('w'), userId, type: 'OPEN', amount: OPENING, note: 'Ưu đãi mở Ví ShopVuiPay cho thành viên mới', at: now() });
       SV.db.save();
     }
     return all;
@@ -564,7 +565,7 @@
       if (o.payment.paid) {
         // Shop thường: hoàn ngay về ví. Shop OMS: tiền vào ví khi OMS ghi nhận khoản hoàn (đồng bộ ngay bên dưới; chuyển khoản ngân hàng chờ shop đối soát).
         if (!o.oms) SV.wallet.refundTo(o, o.amounts.total, 'Hoàn tiền đơn đã hủy');
-        addHistory(o, 'REFUNDED', !o.oms || o.payment.method === 'wallet' ? 'Đã hoàn ' + U.money(o.amounts.total) + ' về Ví ShopVuiPay' : 'Shop sẽ hoàn ' + U.money(o.amounts.total) + ' về Ví ShopVuiPay sau khi đối soát chuyển khoản');
+        addHistory(o, 'REFUNDED', !o.oms || o.payment.method === 'wallet' ? 'Đã hoàn ' + U.money(o.amounts.total) + ' về Ví ShopVuiPay' : 'Shop đang xử lý hoàn tiền về tài khoản ngân hàng đã thanh toán');
       }
       if (by === 'seller') orderNotify(o, 'Đơn hàng đã bị hủy', `Đơn hàng ${o.code} đã bị người bán hủy. Lý do: ${reason}`);
       C.invalidate();
@@ -671,7 +672,7 @@
         o.cancelReason = s.note;
         addHistory(o, 'CANCELLED', s.note);
         // Hàng chuyển hoàn: tiền hoàn do OMS báo khi kho nhận lại hàng (applyRts), không tự hứa hoàn cả đơn.
-        if (o.payment.paid && s.stage !== 'returned') addHistory(o, 'REFUNDED', 'Shop sẽ hoàn ' + U.money(o.amounts.total) + ' về Ví ShopVuiPay');
+        if (o.payment.paid && s.stage !== 'returned') addHistory(o, 'REFUNDED', o.payment.method === 'wallet' ? 'Đã hoàn tiền đơn hủy về Ví ShopVuiPay' : 'Shop đang xử lý hoàn tiền về tài khoản ngân hàng đã thanh toán');
         orderNotify(o, 'Đơn hàng đã bị hủy', 'Đơn hàng ' + o.code + ': ' + s.note + '.');
       } else {
         o.status = s.status;
@@ -740,7 +741,7 @@
     const codes = rma.cases.map((x) => x.code).join(', ');
     if (rma.stage === 'closed') {
       o.refunded = true;
-      const text = rma.refunded > 0 ? 'Kho EZMART đã kiểm định hàng trả, shop đã hoàn ' + U.money(rma.refunded) + ' về Ví ShopVuiPay' : 'Kho EZMART đã nhận và kiểm định hàng trả; đơn chưa phát sinh khoản thu nên không có tiền hoàn';
+      const text = rma.refunded > 0 ? 'Kho EZMART đã kiểm định hàng trả và hoàn ' + U.money(rma.refunded) + (o.payment.method === 'wallet' ? ' về Ví ShopVuiPay' : ' qua chuyển khoản ngân hàng') : 'Kho EZMART đã nhận và kiểm định hàng trả; đơn chưa phát sinh khoản thu nên không có tiền hoàn';
       addHistory(o, 'REFUNDED', text + ' (' + codes + ')');
       orderNotify(o, 'Trả hàng/hoàn tiền hoàn tất', 'Đơn hàng ' + o.code + ': ' + text + '.');
     } else {
@@ -761,7 +762,7 @@
     const done = o.oms.rtsRefunded || 0;
     if (!(s.rtsRefunded > done)) return false;
     o.oms.rtsRefunded = s.rtsRefunded;
-    const text = 'Kho EZMART đã nhận lại hàng chuyển hoàn, shop đã hoàn ' + U.money(s.rtsRefunded - done) + ' về Ví ShopVuiPay';
+    const text = 'Kho EZMART đã nhận lại hàng chuyển hoàn và hoàn ' + U.money(s.rtsRefunded - done) + (o.payment.method === 'wallet' ? ' về Ví ShopVuiPay' : ' qua chuyển khoản ngân hàng');
     addHistory(o, 'REFUNDED', text);
     orderNotify(o, 'Hoàn tiền phần hàng chuyển hoàn', 'Đơn hàng ' + o.code + ': ' + text + '.');
     return true;

@@ -1,6 +1,13 @@
 .env
+.claude/
+deploy/.env
 node_modules/
 .next/
 backend/src/generated/
 backend/storage/
 *.log
+deploy/secrets/
+deploy/backups/
+deploy/exports/
+deploy/.env.*
+!deploy/.env.example

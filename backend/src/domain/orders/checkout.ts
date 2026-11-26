@@ -8,7 +8,8 @@ import {allocationWarehouse} from '@/domain/allocation/contracts';
 import {lockAllocationStock} from '@/domain/inventory/locks';
 import {moveStock} from '@/domain/inventory/service';
 import {issueDocumentCode} from './identifiers';
-import {nextCustomerId} from '@/domain/foundation/service';
+import {nextCustomerId,ensureCustomerSeq} from '@/domain/foundation/service';
+import {chargeBuyer,type Buyer} from '@/domain/storefront/wallet';
 const line=z.object({skuId:z.string().min(1).max(80),quantity:z.number().int().min(1).max(5)});
 const quoteInput=z.object({draftId:z.string().min(1).max(80).optional(),city:z.enum(['HN','DN','HCM']),address:z.string().trim().min(5).max(500),lines:z.array(line).min(1).max(5)});
 const checkoutInput=quoteInput.extend({orderId:z.string().regex(/^DH-\d{6}-[0-9A-F]{6}$/).optional(),draftId:z.string().min(1).max(80).optional(),version:z.number().int().positive().optional(),customerId:z.string().min(1).max(80).optional(),newCustomer:z.boolean().default(false),recipient:z.string().trim().min(2).max(120),phone:z.string().regex(/^[0-9+ ()-]{8,20}$/),channel:z.enum(['NHAP_TAY','WEBSITE','SHOPEE','TIKTOK','SHOPVUI']),externalId:z.string().trim().min(1).max(80).optional(),storefrontRecoveryHash:z.string().regex(/^[a-f0-9]{64}$/).optional(),paymentMethod:z.enum(['TRA_TRUOC','COD']),quote:z.string().max(2048).optional(),mode:z.enum(['confirm','draft']).default('confirm'),paidOnline:z.boolean().default(false)});
@@ -34,10 +35,11 @@ async function calculate(tx:Tx,input:Input){
  const reasons=plan?[]:shortages.length?shortages:['Chưa có kho/cặp kho đủ hàng và đạt SLA 24 giờ theo bảng thời gian của vùng, giờ xử lý và hàng chờ. Không tự hạ ETA để xác nhận.'];
  const hash=digest({input:{draftId:input.draftId??null,city:input.city,address:input.address,lines:requested},lines,plan,shippingFee});return{lines,plan,goods,shippingFee,total:shippingFee===null?null:goods+shippingFee,reasons,hash};
 }
-export async function checkoutQuote(raw:unknown){const input=quoteInput.parse(raw);const q=await db.$transaction(tx=>calculate(tx,input),{isolationLevel:'RepeatableRead',timeout:20000});return{...q,hash:undefined,quote:q.plan?token(q.hash):null,policy:'DOM-REGION-V3',expiresInSeconds:300};}
-export async function createCheckout(actorId:string,key:string,raw:unknown){
+export async function checkoutQuote(raw:unknown){const input=quoteInput.parse(raw);const q=await db.$transaction(tx=>calculate(tx,input),{isolationLevel:'RepeatableRead',maxWait:15000,timeout:20000});return{...q,hash:undefined,quote:q.plan?token(q.hash):null,policy:'DOM-REGION-V3',expiresInSeconds:300};}
+export async function createCheckout(actorId:string,key:string,raw:unknown,buyer?:Buyer){
  const p=checkoutInput.parse(raw);validateLines(p);if(!p.newCustomer&&!p.customerId)throw new DomainError('Chọn khách hàng hoặc nhập khách mới.',422);
- return command(actorId,key,p.mode==='confirm'?'TAO_VA_XAC_NHAN':'TAO_NHAP_MOI','DON_HANG',p.draftId??key,p,async tx=>{
+ if(p.newCustomer)await ensureCustomerSeq();
+ return command(actorId,key,p.mode==='confirm'?'TAO_VA_XAC_NHAN':'TAO_NHAP_MOI','DON_HANG',p.draftId??key,buyer?{...p,buyer}:p,async tx=>{
   const existing=p.draftId?await tx.order.findUnique({where:{id:p.draftId},include:{shipments:true,transactions:true}}):null;
   if(p.draftId&&(!existing||!['NHAP','CHO_HANG'].includes(existing.status)||existing.version!==p.version||existing.shipments.length||existing.transactions.some(t=>t.kind==='THU'&&t.status!=='THAT_BAI')))throw new DomainError('Đơn nháp đã thay đổi hoặc có thu tiền. Tải lại trước khi sửa/xác nhận.');
   // Consistent lock order; serializable retry cannot silently substitute a different quote.
@@ -57,7 +59,11 @@ export async function createCheckout(actorId:string,key:string,raw:unknown){
    for(const item of [...parcel.items].sort((a,b)=>a.skuId.localeCompare(b.skuId)))await moveStock(tx,{warehouseId:parcel.warehouseId,skuId:item.skuId,kind:'GIU',deltas:{sellable:0,reserved:item.quantity,qc:0,quarantined:0},documentType:'KIEN_HANG',documentId:shipment.id,reason:'Tạo đơn và xác nhận',actorId,key:key+':'+shipment.id+':'+item.skuId,at});
   }
   // Prepaid checkout paid through the (simulated) payment gateway: the receipt is recorded with the order, no manual collection step.
-  if(p.mode==='confirm'&&p.paymentMethod==='TRA_TRUOC'&&p.paidOnline)await tx.moneyTransaction.create({data:{orderId:id,kind:'THU',reason:'THU_TRA_TRUOC',note:'Khách thanh toán qua cổng khi đặt hàng (mô phỏng)',amount:q.goods+shipping,source:'CHUYEN_KHOAN',reference:'CTT-'+id,status:'THANH_CONG',idempotencyKey:key+':pay',recordedById:actorId,approvedById:actorId,confirmedAt:at}});
+  if(p.mode==='confirm'&&p.paymentMethod==='TRA_TRUOC'&&p.paidOnline)await tx.moneyTransaction.create({data:{orderId:id,kind:'THU',reason:'THU_TRA_TRUOC',note:'Khách thanh toán qua cổng khi đặt hàng (mô phỏng)',amount:q.goods+shipping,source:'VI_MO_PHONG',reference:'CTT-'+id,status:'THANH_CONG',idempotencyKey:key+':pay',recordedById:actorId,approvedById:actorId,confirmedAt:at}});
+  if(buyer){
+   if(p.mode!=='confirm'||p.channel!=='SHOPVUI'||p.paidOnline!==(buyer.payment==='wallet'))throw new DomainError('Thanh toán ShopVui không hợp lệ.',422);
+   await chargeBuyer(tx,buyer,id,q.goods+shipping);
+  }
   return{id,customerId:customerId!,status:order.status,shippingFee:shipping,parcels:p.mode==='confirm'?q.plan!.parcels.length:0};
  });
 }

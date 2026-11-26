@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {expectedBusinessTables} from './helpers/schema-tables';
 import {mkdir,writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');assert.equal(url.pathname,'/oms');
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');assert.equal(url.pathname,'/oms');
 const main=new Client({connectionString:url.toString()});await main.connect();
 try{const exists=await main.query("SELECT 1 FROM pg_database WHERE datname='oms_test'");if(!exists.rowCount)await main.query('CREATE DATABASE oms_test');}finally{await main.end();}
 url.pathname='/oms_test';const test=new Client({connectionString:url.toString()});await test.connect();try{const count=await test.query("SELECT count(*)::int n FROM information_schema.tables WHERE table_schema='public'");if(count.rows[0].n!==0){const migrations=await test.query('SELECT count(*)::int n FROM _prisma_migrations WHERE finished_at IS NOT NULL');assert(migrations.rows[0].n>=2,'Existing test DB must have the base migrations; deploy applies additive migrations below.');}else console.log('Test DB initially empty');}finally{await test.end();}

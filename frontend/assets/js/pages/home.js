@@ -91,6 +91,10 @@
 
       el.innerHTML = `
       <section class="home-top"><div class="container">
+        <div class="ezmart-callout">
+          <div><b>🏪 EZMART Official Store</b><span>Đồ gia dụng &amp; nhà bếp chính hãng — Ưu đãi đến 50% · Giao nhanh từ hệ thống kho Hà Nội, Đà Nẵng, TP.HCM</span></div>
+          <a class="btn btn-primary" href="#/shop/oms">Mua Sắm Ngay ›</a>
+        </div>
         <div class="banner-wrap">
           <div class="slider" data-slider>
             <div class="slides">${BANNERS.map(banner).join('')}</div>

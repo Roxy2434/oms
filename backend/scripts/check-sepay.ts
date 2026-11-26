@@ -4,7 +4,7 @@ import 'dotenv/config';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 const url=new URL(process.env.DATABASE_URL!);
-assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;delete process.env.SHOPVUI_DEMO_PAY;
+assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;delete process.env.SHOPVUI_DEMO_PAY;
 const {db}=await import('../src/server/db');
 const sv=await import('../src/domain/integrations/shopvui');
 const sepay=await import('../src/domain/payments/sepay');
@@ -40,7 +40,7 @@ try{
  assert(!(await cancelledWithMoney()).some(o=>o.id===w.orderId));
 
  // Fix 1: a paid order cancelled by staff (no automatic refund) shows up in "Đơn hủy còn tiền phải hoàn".
- const s=await order('-s',1,'bank');await sv.pay(ref(dh('-s')));
+ const s=await order('-s',1,'bank');const so=await db.order.findUniqueOrThrow({where:{id:s.orderId},include:{lines:true,shipments:{include:{lines:true}},transactions:true}});await sepay.recordTransfer({id:ns+'-staff-cancel',amount:sepay.prepaidDue(so),content:sepay.payCode(s.orderId),reference:ns+'-staff-cancel'});
  await orderCommand(actor.id,randomUUID(),s.orderId,{action:'cancel',reason:'Kho báo hỏng'});
  const owed=(await cancelledWithMoney()).find(o=>o.id===s.orderId);assert(owed&&owed.owed>0,'cancelled paid order must be in the refund queue');
 
@@ -49,7 +49,8 @@ try{
  const parcels=await db.shipment.findMany({where:{orderId:b.orderId},orderBy:{warehouseId:'asc'}});assert.equal(parcels.length,2);
  await orderCommand(actor.id,randomUUID(),b.orderId,{action:'cancelShipment',shipmentId:parcels[1].id,reason:'Hết hàng'});
  assert.equal((await status(dh('-b'))).paid,false);
- const paid=await sv.pay(ref(dh('-b')));assert(paid.paid>0&&paid.paid<200000+Number((await db.order.findUniqueOrThrow({where:{id:b.orderId}})).shippingFee),JSON.stringify(paid));
+ const remaining=await db.order.findUniqueOrThrow({where:{id:b.orderId},include:{lines:true,shipments:{include:{lines:true}},transactions:true}});const paid={paid:sepay.prepaidDue(remaining)};
+ await sepay.recordTransfer({id:ns+'-split',amount:paid.paid,content:sepay.payCode(b.orderId),reference:ns+'-split'});assert(paid.paid>0&&paid.paid<200000+Number(remaining.shippingFee),JSON.stringify(paid));
  assert.equal((await status(dh('-b'))).paid,true);
  await orderCommand(actor.id,randomUUID(),b.orderId,{action:'pack',shipmentId:parcels[0].id});
  await orderCommand(actor.id,randomUUID(),b.orderId,{action:'handover',shipmentId:parcels[0].id});
@@ -74,13 +75,13 @@ try{
  const qs=await status(dh('-q'));assert.equal(qs.paid,true);assert.equal('qr' in qs,false);
  const om=await money(over.orderId);assert.deepEqual(om.map(t=>t.status),['CHUA_RO']);assert.match(om[0].note,/cần tra soát/);
  assert.equal((await status(dh('-o'))).paid,false);
- // Demo switch (SHOPVUI_DEMO_PAY=1): the QR says demo is available; "Đã thanh toán (demo)" records a receipt marked DEMO.
- // Real transfers keep being recorded while the switch is on.
+ // A stale SHOPVUI_DEMO_PAY=1 MUST NOT reopen the browser payment bypass.
  process.env.SHOPVUI_DEMO_PAY='1';
- const d=await order('-d',1,'bank');assert.equal(d.qr?.demo,true);
- const dp=await sv.pay(ref(dh('-d')));assert(dp.paid>0);
- const dm=await money(d.orderId);assert.deepEqual(dm.map(t=>[t.status,t.reference.startsWith('DEMO-')]),[['THANH_CONG',true]]);assert.match(dm[0].note,/DEMO/);
- assert.equal((await status(dh('-d'))).paid,true);
+ const d=await order('-d',1,'bank');assert.equal(d.qr?.demo,false);
+ await assert.rejects(sv.pay(ref(dh('-d'))),/SePay/);
+ assert.equal((await money(d.orderId)).length,0);
+ assert.equal((await status(dh('-d'))).paid,false);
+ await sv.cancel({...ref(dh('-d')),reason:'Đóng fixture kiểm chặn thanh toán demo trước ca expiry'});
  const r2=await order('-r',1,'bank');
  assert.equal((await sepay.recordTransfer({id:ns+'-real',amount:r2.qr!.amount,content:'MBVCB.'+r2.qr!.note,reference:'FTR'+ns}))?.status,'THANH_CONG','real transfer still recorded with demo on');
  delete process.env.SHOPVUI_DEMO_PAY;

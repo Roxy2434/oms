@@ -2,7 +2,7 @@ import 'dotenv/config';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');const {saveAccount,saveCatalog,saveCustomer,countStock}=await import('../src/domain/foundation/service');const {receiveStock}=await import('../src/domain/inventory/service');const {createDraft}=await import('../src/domain/orders/service');
 const prefix='p2-'+randomUUID().slice(0,8);const key=()=>randomUUID();const results:string[]=[];
 try{await db.account.updateMany({where:{role:'QUAN_LY'},data:{active:false}});const manager=await db.account.create({data:{id:prefix,name:'QA Manager',username:prefix,passwordHash:'not-a-login-hash',role:'QUAN_LY'}});const staff=await db.account.create({data:{name:'QA Staff',username:prefix+'s',passwordHash:'not-a-login-hash',role:'NHAN_VIEN'}});

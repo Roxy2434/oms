@@ -4,7 +4,7 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {db} from '../src/server/db';
 import {resolveOrderId} from '../src/domain/orders/identifiers';
 import {customers,warehouses,shippingAddress} from '../prisma/presentation-fixtures';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');assert.equal(url.pathname,'/oms','Only the owned local sample DB may be normalized');
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');assert.equal(url.pathname,'/oms','Only the owned local sample DB may be normalized');
 const key='presentation-fixtures-v1';
 try{const result=await db.$transaction(async tx=>{
  await tx.$queryRaw`SELECT id FROM "DON_HANG" ORDER BY id FOR UPDATE`;

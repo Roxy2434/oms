@@ -15,7 +15,7 @@ function plan(parcels:AllocatedParcel[]):AllocationPlan{
  const estimated=true;
  return {parcels,totalCost:parcels.reduce((s,p)=>s+p.freight+p.packing,0),etaHours:Math.max(...parcels.map(p=>p.etaHours)),policy:ROUTING_POLICY,
  estimated,
- explanation:(parcels.length===1?'Một kho đủ toàn đơn và đạt SLA mẫu: chọn tổng cước + đóng gói thấp nhất.':'Không có phương án một kho đạt tồn/SLA mẫu: chọn cách chia tối đa hai kho có tổng cước + đóng gói thấp nhất.')+' Tính theo vùng giao hàng và bảng phí/thời gian mẫu, không theo khoảng cách địa lý. ETA gồm xử lý kho, hàng chờ và vận chuyển; không phải cam kết hãng.'};
+ explanation:parcels.length===1?'Đáp ứng toàn bộ sản phẩm từ 1 kho đạt chuẩn SLA 24h với tổng cước vận chuyển và phí đóng gói thấp nhất.':'Tách tối đa 2 kho để đủ tồn khả dụng và đạt chuẩn SLA 24h với tổng cước vận chuyển và phí đóng gói thấp nhất.'};
 }
 export function comparePlans(a:AllocationPlan,b:AllocationPlan){
  return a.totalCost-b.totalCost||a.etaHours-b.etaHours||JSON.stringify(a.parcels.map(p=>[p.warehouseId,p.items.map(i=>i.quantity)])).localeCompare(JSON.stringify(b.parcels.map(p=>[p.warehouseId,p.items.map(i=>i.quantity)])));
@@ -32,10 +32,22 @@ export function solveAllocation(lines:AllocationLine[],warehouses:AllocationWare
  let best:AllocationPlan|null=null;
  for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++){
   const a=candidates[i],b=candidates[j];if(lines.some(l=>(a.w.stock[l.skuId]??0)+(b.w.stock[l.skuId]??0)<l.quantity))continue;
-  function visit(index:number,quantities:number[]){
-   if(index===lines.length){const pa=parcel(a.w,lines,quantities,destination,a.route),pb=parcel(b.w,lines,lines.map((l,k)=>l.quantity-quantities[k]),destination,b.route);if(!pa||!pb)return;const candidate=plan([pa,pb]);if(!best||comparePlans(candidate,best)<0)best=candidate;return;}
-   const l=lines[index];for(let take=Math.max(0,l.quantity-(b.w.stock[l.skuId]??0));take<=Math.min(l.quantity,a.w.stock[l.skuId]??0);take++)visit(index+1,[...quantities,take]);
-  }visit(0,[]);
+  const regA=a.w.region.replace(/-NOITHANH$/,''),regB=b.w.region.replace(/-NOITHANH$/,'');
+  const sameA=destination===regA+'-NOITHANH',sameB=destination===regB+'-NOITHANH';
+  const packA=a.w.packingFee??packing[a.w.id]??packing['KHO-'+regA],packB=b.w.packingFee??packing[b.w.id]??packing['KHO-'+regB];
+  const pairEta=Math.max(a.route.etaHours,b.route.etaHours),picked=new Array<number>(lines.length);
+  function visit(index:number,gramsA:number,gramsB:number){
+   if(index===lines.length){
+    if(gramsA===0||gramsB===0)return;
+    const cost=freight(gramsA,sameA)+packA+freight(gramsB,sameB)+packB;
+    if(best&&(cost>best.totalCost||(cost===best.totalCost&&pairEta>best.etaHours)))return;
+    const pa=parcel(a.w,lines,picked,destination,a.route),pb=parcel(b.w,lines,lines.map((l,k)=>l.quantity-picked[k]),destination,b.route);
+    if(!pa||!pb)return;
+    const candidate=plan([pa,pb]);if(!best||comparePlans(candidate,best)<0)best=candidate;return;
+   }
+   const l=lines[index],minT=Math.max(0,l.quantity-(b.w.stock[l.skuId]??0)),maxT=Math.min(l.quantity,a.w.stock[l.skuId]??0);
+   for(let take=minT;take<=maxT;take++){picked[index]=take;visit(index+1,gramsA+l.weightGrams*take,gramsB+l.weightGrams*(l.quantity-take));}
+  }visit(0,0,0);
  }
  return best;
 }

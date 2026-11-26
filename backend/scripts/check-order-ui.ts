@@ -7,7 +7,7 @@ import {SignJWT} from 'jose';
 import {chromium} from '@playwright/test';
 import {station} from './helpers/station';
 import assert from 'node:assert/strict';
-const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
+const url=new URL(process.env.DATABASE_URL!);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,process.env.OMS_DB_PORT||'55432');url.pathname='/oms_test';process.env.DATABASE_URL=url.toString();delete process.env.SEPAY_API_TOKEN;
 const {db}=await import('../src/server/db');const {saveCustomer}=await import('../src/domain/foundation/service');const prefix='ui-'+randomUUID().slice(0,8);const origin='http://127.0.0.1:3002';let server:ChildProcess|undefined;
 const browser=await chromium.launch({channel:'msedge',headless:true});
 async function start(database=process.env.DATABASE_URL!){await new Promise<void>((resolve,reject)=>{const s=createServer();s.on('error',reject);s.listen(3002,'127.0.0.1',()=>s.close(()=>resolve()));});server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3002'],{env:{...process.env,DATABASE_URL:database,APP_ORIGIN:origin},stdio:'ignore'});for(let i=0;i<50;i++){try{if((await fetch(origin+'/login')).ok)return;}catch{}await delay(100);}throw new Error('Test server not ready');}

@@ -26,10 +26,15 @@ services:
       DATABASE_URL: postgresql://oms:${DB_PASSWORD:-oms-demo-db-2026}@db:5432/oms
       SESSION_SECRET: ${SESSION_SECRET:-oms-demo-session-secret-change-me-0123456789abcdef}
       BOOTSTRAP_PASSWORD: ${BOOTSTRAP_PASSWORD:-OmsDemo@2026}
-      APP_ORIGIN: http://127.0.0.1:3001
-      SEPAY_API_TOKEN: ""
-      SEPAY_ACCOUNT: ""
-      SEPAY_POLL: "off"
+      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:3001}
+      SHOPVUI_ORIGIN: ${SHOPVUI_ORIGIN:-http://127.0.0.1:8000,http://localhost:8000}
+      OMS_DEMO_MODE: ${OMS_DEMO_MODE:-1}
+      OMS_CLASSROOM_MODE: ${OMS_CLASSROOM_MODE:-1}
+      SEPAY_API_TOKEN: ${SEPAY_API_TOKEN:-}
+      SEPAY_ACCOUNT: ${SEPAY_ACCOUNT:-}
+      SEPAY_BANK: ${SEPAY_BANK:-970422}
+      SEPAY_HOLDER: ${SEPAY_HOLDER:-}
+      SEPAY_POLL: ${SEPAY_POLL:-on}
     ports:
       - "127.0.0.1:3001:3001"
     healthcheck:
