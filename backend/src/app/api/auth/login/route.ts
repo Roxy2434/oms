@@ -9,6 +9,7 @@ import {isPublicDeployment} from '@/domain/demo-mode';
 import {passwordWork} from '@/server/password-work';
 import {publicLimit,durableLimit,privateKey} from '@/server/public-security';
 export async function POST(req:Request){
+ if(process.env.OMS_SITE_ROLE==='storefront')return NextResponse.json({error:'Không tìm thấy trang.'},{status:404});
  const origin=req.headers.get('origin');
  if(!origin||!allowedAppOrigins(req).has(origin))return NextResponse.json({error:'Nguồn yêu cầu không hợp lệ.'},{status:403});
  // Never trust arbitrary X-Forwarded-For on this direct local server. A global bucket bounds username spraying.
