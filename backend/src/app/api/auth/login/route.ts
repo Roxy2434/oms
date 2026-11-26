@@ -10,7 +10,7 @@ import {passwordWork} from '@/server/password-work';
 import {publicLimit,durableLimit,privateKey} from '@/server/public-security';
 export async function POST(req:Request){
  const origin=req.headers.get('origin');
- if(!origin||!allowedAppOrigins().has(origin))return NextResponse.json({error:'Nguồn yêu cầu không hợp lệ.'},{status:403});
+ if(!origin||!allowedAppOrigins(req).has(origin))return NextResponse.json({error:'Nguồn yêu cầu không hợp lệ.'},{status:403});
  // Never trust arbitrary X-Forwarded-For on this direct local server. A global bucket bounds username spraying.
  try{if(isPublicDeployment())await publicLimit(req,'staff-login',30);else if(!requestLimiter.take('login:global',120,60000))return NextResponse.json({error:'Quá nhiều yêu cầu đăng nhập. Thử lại sau.'},{status:429});}catch(e){return NextResponse.json({error:'Chưa thể đăng nhập. Vui lòng thử lại sau.'},{status:e instanceof DomainError?e.status:503});}
  let raw:unknown;try{raw=await readJsonLimited(req,4096);}catch(e){return NextResponse.json({error:'Dữ liệu đăng nhập không hợp lệ.'},{status:e instanceof DomainError?e.status:422});}

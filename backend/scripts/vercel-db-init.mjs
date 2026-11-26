@@ -1,4 +1,5 @@
-// Runs during `vercel-build`: applies Prisma migrations to Neon and seeds initial accounts/catalog/17 live cases ONLY when DB is empty.
+// Runs during `vercel-build`: applies Prisma migrations to Neon and seeds base staff accounts/warehouses/SKUs ONLY when DB has 0 accounts.
+// Heavy multi-order live-case seeding (`prepareDemo`) runs in the `sin1` (Singapore) runtime (`1ms` RTT to Neon) instead of the `iad1` (US East) build container (`260ms` RTT).
 import { spawnSync } from 'node:child_process';
 import pg from 'pg';
 
@@ -36,20 +37,17 @@ const client = new pg.Client({ connectionString: directUrl });
 await client.connect();
 const { rows: accRows } = await client.query('SELECT count(*)::int AS n FROM "TAI_KHOAN"');
 const accountCount = accRows[0]?.n ?? 0;
-const { rows: ordRows } = await client.query('SELECT count(*)::int AS n FROM "DON_HANG"');
-const orderCount = ordRows[0]?.n ?? 0;
 await client.end();
 
-const bootstrapEnv = {
-  DATABASE_URL: directUrl,
-  BOOTSTRAP_PASSWORD: process.env.BOOTSTRAP_PASSWORD || 'Ezmart@2026Admin',
-  SESSION_SECRET: process.env.SESSION_SECRET || 'vercel-classroom-default-session-secret-please-set-in-env-012345',
-  OMS_DEMO_MODE: '1',
-  OMS_PUBLIC_DEPLOYMENT: '0',
-  OMS_DEMO_REAL_BANK: '0',
-};
-
 if (accountCount === 0) {
+  const bootstrapEnv = {
+    DATABASE_URL: directUrl,
+    BOOTSTRAP_PASSWORD: process.env.BOOTSTRAP_PASSWORD || 'Ezmart@2026Admin',
+    SESSION_SECRET: process.env.SESSION_SECRET || 'vercel-classroom-default-session-secret-please-set-in-env-012345',
+    OMS_DEMO_MODE: '1',
+    OMS_PUBLIC_DEPLOYMENT: '0',
+    OMS_DEMO_REAL_BANK: '0',
+  };
   run(
     'Seeding initial staff accounts, 3 warehouses, and 10 EZMART SKUs',
     process.execPath,
@@ -57,16 +55,5 @@ if (accountCount === 0) {
     bootstrapEnv,
   );
 } else {
-  console.log(`[vercel-db-init] Staff accounts already seeded (${accountCount} accounts).`);
-}
-
-if (orderCount === 0) {
-  run(
-    'Preparing 17 DOM/RMA/Report/ShopVui live cases + classroom stock buffer',
-    process.execPath,
-    ['node_modules/tsx/dist/cli.mjs', 'scripts/vercel-prepare-demo.ts'],
-    bootstrapEnv,
-  );
-} else {
-  console.log(`[vercel-db-init] Database already initialized (${orderCount} orders); preserving existing data.`);
+  console.log(`[vercel-db-init] Schema ready and staff accounts present (${accountCount} accounts).`);
 }

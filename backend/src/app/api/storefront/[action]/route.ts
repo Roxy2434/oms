@@ -7,10 +7,10 @@ import {DomainError} from '@/server/errors';
 import {readJsonLimited,rateLimit,allowedShopOrigins} from '@/server/request-security';
 import {isPublicDeployment,isClassroomMode,isCaptchaDisabled} from '@/domain/demo-mode';
 import {publicLimit,durableLimit,verifyRegistrationChallenge,privateKey} from '@/server/public-security';
-const allowed=()=>allowedShopOrigins();
-function headers(req:Request){const origin=req.headers.get('origin');return {'Cache-Control':'no-store','Vary':'Origin',...(origin&&allowed().has(origin)?{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Credentials':'true','Access-Control-Allow-Headers':'Content-Type','Access-Control-Allow-Methods':'GET, POST, OPTIONS'}:{})};}
+const allowed=(req:Request)=>allowedShopOrigins(req);
+function headers(req:Request){const origin=req.headers.get('origin');return {'Cache-Control':'no-store','Vary':'Origin',...(origin&&allowed(req).has(origin)?{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Credentials':'true','Access-Control-Allow-Headers':'Content-Type','Access-Control-Allow-Methods':'GET, POST, OPTIONS'}:{})};}
 async function handle(req:Request,run:()=>Promise<unknown>){try{
- const origin=req.headers.get('origin');if(origin&&!allowed().has(origin)||req.method==='POST'&&(!origin||!allowed().has(origin)))throw new DomainError('Nguồn yêu cầu ShopVui không hợp lệ.',403);
+ const origin=req.headers.get('origin');if(origin&&!allowed(req).has(origin)||req.method==='POST'&&(!origin||!allowed(req).has(origin)))throw new DomainError('Nguồn yêu cầu ShopVui không hợp lệ.',403);
  return NextResponse.json(await run(),{headers:headers(req)});
 }catch(e){if(e instanceof ZodError)return NextResponse.json({error:e.issues.map(i=>i.message).join('; '),field:e.issues[0]?.path[0]},{status:422,headers:headers(req)});
  if(e instanceof DomainError)return NextResponse.json({error:e.message},{status:e.status,headers:headers(req)});
