@@ -92,8 +92,8 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
 .seg span { display: inline-block; padding: 8px 14px; border: 1px solid var(--line-2); border-radius: 2px; }
 .seg input:checked + span { border-color: var(--primary); color: var(--primary); }
-.seg input:focus-visible + span { outline: 2px solid var(--primary); }
-:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.seg input:focus-visible + span { border-color: var(--primary); }
+:focus, :focus-visible { outline: none; }
 
 /* ---------- 3. Header ---------- */
 #header { position: relative; z-index: 100; }

@@ -385,8 +385,8 @@
 
     .signin-template .form-input:focus {
       background: var(--white);
-      border-color: var(--primary-blue);
-      box-shadow: 0 0 0 3.5px rgba(40, 89, 217, 0.12);
+      border-color: #94A3B8;
+      box-shadow: none;
     }
 
     .signin-template .form-row {
