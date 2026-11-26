@@ -13,7 +13,7 @@ import {paymentCommand} from '@/domain/payments/service';
 import {moneyPosition,causeAmount} from '@/domain/payments/balances';
 import {returnCommand} from '@/domain/returns/service';
 import {effectiveValue} from '@/domain/dashboard/queries';
-import {sepayConfig,prepaidDue,qrUrl,payCode} from '@/domain/payments/sepay';
+import {sepayConfig,prepaidDue,qrUrl,payCode,pollSepayOnDemand} from '@/domain/payments/sepay';
 
 // Same split as ShopVui's own shipping table; OMS prices/allocates for HN, DN, HCM, so other provinces use their region's city.
 const NORTH=['Hà Nội','Hải Phòng','Bắc Ninh','Cao Bằng','Điện Biên','Hưng Yên','Lai Châu','Lạng Sơn','Lào Cai','Ninh Bình','Phú Thọ','Quảng Ninh','Sơn La','Thái Nguyên','Tuyên Quang'];
@@ -186,7 +186,12 @@ const returnStage=(st:string[])=>st.every(x=>x==='TU_CHOI')?'rejected':st.some(x
 /** refs: (orderId, token) pairs; refs whose token does not match are ignored, so nobody reads orders they did not place. */
 export async function statuses(refs:{orderId:string;token:string}[]){
  const list=[...new Set(refs.slice(0,100).filter(r=>owns(r.orderId,r.token)).map(r=>r.orderId))];
- const all=await db.order.findMany({where:{channel:'SHOPVUI',id:{in:list}},select:{id:true,status:true,reason:true,confirmedAt:true,paymentMethod:true,shopPurchase:{select:{payment:true}},shippingFee:true,lines:{select:{id:true,skuId:true,quantity:true,priceSnapshot:true}},shipments:{select:{status:true,trackingCode:true,deliveredAt:true,handedOverAt:true,lines:{select:{orderLineId:true,quantity:true}}}},transactions:true,returns:{select:{id:true,kind:true,code:true,trackingCode:true,status:true}}}});
+ const load=()=>db.order.findMany({where:{channel:'SHOPVUI',id:{in:list}},select:{id:true,status:true,reason:true,confirmedAt:true,paymentMethod:true,shopPurchase:{select:{payment:true}},shippingFee:true,lines:{select:{id:true,skuId:true,quantity:true,priceSnapshot:true}},shipments:{select:{status:true,trackingCode:true,deliveredAt:true,handedOverAt:true,lines:{select:{orderLineId:true,quantity:true}}}},transactions:true,returns:{select:{id:true,kind:true,code:true,trackingCode:true,status:true}}}});
+ let all=await load();
+ if(process.env.VERCEL==='1'&&sepayConfig()&&all.some(o=>o.status==='DA_XAC_NHAN'&&o.paymentMethod==='TRA_TRUOC'&&o.shopPurchase?.payment==='bank'&&!o.transactions.some(t=>t.kind==='THU'&&t.status==='THANH_CONG'))){
+  const [exp,polled]=await Promise.all([expireUnpaidTransfers().catch(()=>({expired:[] as string[]})),pollSepayOnDemand(4000)]);
+  if(exp.expired.length>0||polled.recorded>0)all=await load();
+ }
  const orders=all.map(o=>({...o,returns:o.returns.filter(r=>r.kind==='KHACH_TRA'),senderReturns:o.returns.filter(r=>r.kind==='CHUYEN_HOAN')}));
  return {orders:orders.map(o=>{
   const activeItems:Record<string,number>={},deliveredItems:Record<string,number>={};

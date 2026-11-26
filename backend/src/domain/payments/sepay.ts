@@ -72,3 +72,13 @@ export function startSepayPoller(everyMs=5000){
  let busy=false;setInterval(async()=>{if(busy)return;busy=true;try{await pollSepay();}catch(e){console.error('SePay poll:',e instanceof Error?e.message:e);}finally{busy=false;}},everyMs);
  console.log('SePay: đang theo dõi chuyển khoản thật; không thực hiện chuyển tiền ra.');
 }
+let lastOnDemandPoll=0,onDemandPromise:Promise<{recorded:number}>|null=null;
+/** Serverless fallback when background setInterval does not persist between requests (Vercel). */
+export async function pollSepayOnDemand(minIntervalMs=4000){
+ if(process.env.VERCEL!=='1'||!sepayConfig()||process.env.SEPAY_POLL==='off')return {recorded:0};
+ const now=Date.now();if(now-lastOnDemandPoll<minIntervalMs)return {recorded:0};
+ if(onDemandPromise)return onDemandPromise;
+ lastOnDemandPoll=now;
+ onDemandPromise=pollSepay().catch(e=>{console.error('SePay on-demand poll:',e instanceof Error?e.message:e);return {recorded:0};}).finally(()=>{onDemandPromise=null;});
+ return onDemandPromise;
+}
